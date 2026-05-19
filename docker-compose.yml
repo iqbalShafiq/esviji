@@ -1,0 +1,96 @@
+# Docker Compose for AI SVG Asset Builder - Production
+# Includes PostgreSQL database, API backend, and Web frontend
+#
+# Usage:
+#   cp .env.docker .env
+#   # Edit .env and set your OPENAI_API_KEY
+#   docker-compose up -d
+
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: svg-builder-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-svgbuilder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-svgbuilder_password}
+      POSTGRES_DB: ${POSTGRES_DB:-svg_asset_builder}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-svgbuilder} -d ${POSTGRES_DB:-svg_asset_builder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - svg-builder-network
+
+  # API Backend
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    container_name: svg-builder-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      API_PORT: ${API_PORT:-4000}
+      API_HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-svgbuilder}:${POSTGRES_PASSWORD:-svgbuilder_password}@postgres:5432/${POSTGRES_DB:-svg_asset_builder}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      LOCAL_STORAGE_DIR: /app/storage
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - api_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - svg-builder-network
+
+  # Web Frontend
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+    container_name: svg-builder-web
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:${API_PORT:-4000}
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - svg-builder-network
+
+volumes:
+  postgres_data:
+    driver: local
+  api_storage:
+    driver: local
+
+networks:
+  svg-builder-network:
+    driver: bridge

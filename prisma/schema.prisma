@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Asset {
+  id                String    @id @default(cuid())
+  packId            String?
+  name              String?
+  prompt            String
+  assetType         String
+  mode              String // direct | reference | premium
+  style             String?
+  status            String    @default("pending") // pending | processing | completed | failed
+  width             Int
+  height            Int
+  referenceImageUrl String?
+  finalSvgPath      String?
+  finalPngPath      String?
+  finalDebugPngPath String?
+  currentIteration  Int       @default(0)
+  finalScores       Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  pack       AssetPack?       @relation(fields: [packId], references: [id])
+  iterations AssetIteration[]
+}
+
+model AssetPack {
+  id                  String   @id @default(cuid())
+  prompt              String
+  assetType           String
+  quantity            Int
+  style               String?
+  status              String   @default("pending")
+  styleSystem         Json
+  consistencyScores   Json?
+  zipPath             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  assets Asset[]
+}
+
+model AssetIteration {
+  id                String   @id @default(cuid())
+  assetId           String
+  iterationNumber   Int
+  brief             Json
+  styleSystem       Json
+  referenceAnalysis Json?
+  layout            Json
+  svgDraftPath      String?
+  pngPreviewPath    String?
+  debugPreviewPath  String?
+  scores            Json?
+  issues            Json?
+  actionTaken       Json?
+  createdAt         DateTime @default(now())
+
+  asset Asset @relation(fields: [assetId], references: [id])
+}

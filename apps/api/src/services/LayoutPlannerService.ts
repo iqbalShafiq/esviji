@@ -1,0 +1,48 @@
+import { LlmProvider, generateStructuredOutput, buildLayoutPlannerPrompt } from '@svg-builder/ai-core';
+import { LayoutBlueprintSchema, type LayoutBlueprint, type CreativeBrief, type StyleSystem, type AssetTypeClassification } from '@svg-builder/shared';
+import { normalizedToPixel } from '@svg-builder/svg-core';
+
+export class LayoutPlannerService {
+  constructor(private llmProvider: LlmProvider) {}
+
+  async plan(
+    brief: CreativeBrief,
+    styleSystem: StyleSystem,
+    classification: AssetTypeClassification,
+    width: number,
+    height: number,
+    referenceAnalysis?: unknown,
+    options?: { onToken?: (token: string) => void }
+  ): Promise<LayoutBlueprint> {
+    const { system, user } = buildLayoutPlannerPrompt({
+      brief,
+      styleSystem,
+      classification,
+      width,
+      height,
+      referenceAnalysis,
+    });
+
+    const layout = await generateStructuredOutput(
+      this.llmProvider,
+      system,
+      user,
+      LayoutBlueprintSchema,
+      { maxRetries: 2, onToken: options?.onToken }
+    );
+
+    // Convert normalized bounds to pixel bounds for each layer
+    const layersWithPixelBounds = layout.layers.map((layer) => {
+      const pixelBounds = normalizedToPixel(layer.bounds, width, height);
+      return {
+        ...layer,
+        pixelBounds,
+      };
+    });
+
+    return {
+      ...layout,
+      layers: layersWithPixelBounds,
+    };
+  }
+}

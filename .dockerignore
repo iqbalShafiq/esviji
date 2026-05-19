@@ -1,0 +1,53 @@
+# Docker ignore file
+# Files and directories to exclude from Docker build context
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files (except .env.example)
+.env
+.env.local
+.env.*.local
+
+# Storage
+storage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+README.md
+CHANGELOG.md
+LICENSE
+
+# Keep Docker config and Compose files in build context.
+# They are needed by Docker build and deployment workflows.

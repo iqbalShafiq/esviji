@@ -1,0 +1,19 @@
+:root {
+  --bg: #f4f1ea;
+  --surface: #fffdf7;
+  --surface-2: #eef3f8;
+  --ink: #07111f;
+  --muted: #647083;
+  --line: #cbd5e1;
+  --blueprint: #1457d9;
+  --cyan: #00a8c8;
+  --green: #2f9e44;
+  --amber: #d89400;
+  --red: #d64545;
+  --shadow-soft: 0 20px 60px rgba(7, 17, 31, 0.08);
+  --radius-panel: 0px;
+  --radius-control: 0px;
+  --font-display: 'Sora', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}

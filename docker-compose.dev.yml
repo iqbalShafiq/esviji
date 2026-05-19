@@ -1,0 +1,125 @@
+# Docker Compose for AI SVG Asset Builder - Development
+# Mounts source code for hot reload and runs in watch mode
+#
+# Usage:
+#   cp .env.docker .env
+#   # Edit .env and set your OPENAI_API_KEY
+#   docker-compose -f docker-compose.dev.yml up -d
+
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: svg-builder-postgres-dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-svgbuilder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-svgbuilder_password}
+      POSTGRES_DB: ${POSTGRES_DB:-svg_asset_builder}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-svgbuilder} -d ${POSTGRES_DB:-svg_asset_builder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - svg-builder-dev-network
+
+  # API Backend (Development Mode)
+  api:
+    image: node:20-alpine
+    container_name: svg-builder-api-dev
+    working_dir: /app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      API_PORT: ${API_PORT:-4000}
+      API_HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-svgbuilder}:${POSTGRES_PASSWORD:-svgbuilder_password}@postgres:5432/${POSTGRES_DB:-svg_asset_builder}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      LOCAL_STORAGE_DIR: /app/storage
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/shared/node_modules
+      - /app/packages/svg-core/node_modules
+      - /app/packages/ai-core/node_modules
+      - api_dev_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - svg-builder-dev-network
+    command: >
+      sh -c "
+        echo 'Installing pnpm and prisma...' &&
+        npm install -g pnpm@9.0.0 prisma@5.14.0 &&
+        echo 'Installing dependencies...' &&
+        pnpm install &&
+        echo 'Building shared packages...' &&
+        pnpm --filter=@svg-builder/shared build &&
+        pnpm --filter=@svg-builder/svg-core build &&
+        pnpm --filter=@svg-builder/ai-core build &&
+        echo 'Running Prisma migrations...' &&
+        npx prisma migrate dev --schema=prisma/schema.prisma --name init || npx prisma migrate deploy --schema=prisma/schema.prisma &&
+        npx prisma generate --schema=prisma/schema.prisma &&
+        echo 'Starting API in dev mode...' &&
+        pnpm --filter=api dev
+      "
+
+  # Web Frontend (Development Mode)
+  web:
+    image: node:20-alpine
+    container_name: svg-builder-web-dev
+    working_dir: /app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VITE_API_BASE_URL: http://localhost:${API_PORT:-4000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/packages/shared/node_modules
+    depends_on:
+      - api
+    networks:
+      - svg-builder-dev-network
+    command: >
+      sh -c "
+        echo 'Installing pnpm...' &&
+        npm install -g pnpm@9.0.0 &&
+        echo 'Installing dependencies...' &&
+        pnpm install &&
+        echo 'Building shared packages...' &&
+        pnpm --filter=@svg-builder/shared build &&
+        echo 'Starting Web in dev mode...' &&
+        pnpm --filter=web dev
+      "
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  api_dev_storage:
+    driver: local
+
+networks:
+  svg-builder-dev-network:
+    driver: bridge
