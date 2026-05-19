@@ -54,7 +54,7 @@ export function sanitizeSvg(svg: string): string {
   sanitized = sanitized.replace(/<!--[\s\S]*?-->/g, "");
 
   // Process tags: remove blocked elements and strip bad attributes
-  const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9\-]*)([^>]*)>/g;
+  const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>/g;
   const resultParts: string[] = [];
   let lastIndex = 0;
   let match;
@@ -101,7 +101,7 @@ export function sanitizeSvg(svg: string): string {
       // Strip bad attributes
       let cleanedTag = `<${tagName}`;
       const attrRegex =
-        /\s+([a-zA-Z_:][a-zA-Z0-9_:.\-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))|(\s+[a-zA-Z_:][a-zA-Z0-9_:.\-]*)(?=\s|>|\/>)/g;
+        /\s+([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))|(\s+[a-zA-Z_:][a-zA-Z0-9_:.-]*)(?=\s|>|\/>)/g;
       let attrMatch;
       while ((attrMatch = attrRegex.exec(fullMatch)) !== null) {
         const attrName = attrMatch[1] || attrMatch[5];

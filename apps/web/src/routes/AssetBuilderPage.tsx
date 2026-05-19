@@ -14,8 +14,9 @@ import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { JsonInspector } from "../components/builder/JsonInspector.js";
 import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
+import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import type { AssetResponse, PreviewMode, BackgroundMode, PreviewSize, JobResponse } from "../types/index.js";
-import { getAsset, subscribeJobStream } from "../lib/api.js";
+import { getAsset, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
 
 export default function AssetBuilderPage() {
   const [asset, setAsset] = useState<AssetResponse | undefined>();
@@ -25,6 +26,7 @@ export default function AssetBuilderPage() {
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
 
   const handleSubmitStart = () => {
     setIsLoading(true);
@@ -38,6 +40,20 @@ export default function AssetBuilderPage() {
     setJobId(id);
     setJob(undefined);
     setAsset(undefined);
+  };
+
+  const handleManualRefine = async (instruction: string) => {
+    if (!asset) return;
+    setIsRefining(true);
+    try {
+      const result = await iterateSvgAsset({
+        assetId: asset.id,
+        instruction,
+      });
+      setAsset(result);
+    } finally {
+      setIsRefining(false);
+    }
   };
 
   useEffect(() => {
@@ -111,6 +127,15 @@ export default function AssetBuilderPage() {
                 onPreviewSizeChange={setPreviewSize}
               />
             }
+            refinementPrompt={
+              asset ? (
+                <ManualRefinementPrompt
+                  disabled={!asset || isLoading || isRefining}
+                  isLoading={isRefining}
+                  onSubmit={handleManualRefine}
+                />
+              ) : undefined
+            }
           />
         }
         rightPanel={
@@ -126,9 +151,11 @@ export default function AssetBuilderPage() {
                   pngUrl={asset.finalPngUrl}
                 />
                 <ScoresCard scores={asset.evaluation?.scores} />
-                <QualityGates gates={asset.qualityGates} />
+                {asset.qualityGates && asset.qualityGates.length > 0 && (
+                  <QualityGates gates={asset.qualityGates} />
+                )}
                 <IterationTimeline iterations={asset.iterations} />
-                <IssuesPanel issues={asset.evaluation?.issues} />
+                <IssuesPanel issues={asset.evaluation?.issues} iterationLabel="latest/final iteration" />
                 {asset.classification && (
                   <JsonInspector data={asset.classification} title="Classification" />
                 )}
@@ -141,22 +168,16 @@ export default function AssetBuilderPage() {
                 {asset.layoutBlueprint && (
                   <JsonInspector data={asset.layoutBlueprint} title="Layout" />
                 )}
-                {job?.logs && job.logs.length > 0 && (
-                  <PipelineFlowLogs
-                    logs={job.logs}
-                    currentStage={job.currentStage}
-                    failed={job.status === "failed"}
-                    stageStreams={job.stageStreams}
-                  />
-                )}
               </>
             )}
-            {!asset && job?.logs && job.logs.length > 0 && (
+            {job?.logs && job.logs.length > 0 && (
               <PipelineFlowLogs
                 logs={job.logs}
                 currentStage={job.currentStage}
                 failed={job.status === "failed"}
                 stageStreams={job.stageStreams}
+                stageReasoningStreams={job.stageReasoningStreams}
+                error={job.error}
               />
             )}
             {!asset && (

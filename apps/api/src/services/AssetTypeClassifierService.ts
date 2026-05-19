@@ -14,6 +14,7 @@ export class AssetTypeClassifierService {
       useCase?: string;
       hasReference?: boolean;
       onToken?: (token: string) => void;
+      onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
     }
   ): Promise<AssetTypeClassification> {
     const { system, user } = buildAssetTypeClassifierPrompt({
@@ -31,7 +32,7 @@ export class AssetTypeClassifierService {
       system,
       user,
       AssetTypeClassificationSchema,
-      { maxRetries: 2, onToken: options?.onToken }
+      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
     );
 
     return classification;

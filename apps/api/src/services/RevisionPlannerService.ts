@@ -10,11 +10,12 @@ export class RevisionPlannerService {
     issues: EvaluationIssue[],
     currentIteration: number,
     classification: AssetTypeClassification,
-    options?: { onToken?: (token: string) => void }
+    options?: { onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
   ): Promise<RevisionPlan> {
     const { system, user } = buildRevisionPlannerPrompt({
       classification,
       layout,
+      svgSource: svg,
       issues,
       currentIteration,
     });
@@ -24,7 +25,7 @@ export class RevisionPlannerService {
       system,
       user,
       RevisionPlanSchema,
-      { maxRetries: 2, onToken: options?.onToken }
+      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
     );
 
     return plan;

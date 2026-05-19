@@ -6,6 +6,7 @@ import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { PackBuilderForm } from "../components/builder/PackBuilderForm.js";
 import { AssetGrid } from "../components/builder/AssetGrid.js";
 import { PackConsistencyPanel } from "../components/builder/PackConsistencyPanel.js";
+import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import type { PackResponse, AssetResponse, JobResponse } from "../types/index.js";
 import { getPack, subscribeJobStream } from "../lib/api.js";
 
@@ -118,8 +119,20 @@ export default function PackBuilderPage() {
           </div>
         }
         rightPanel={
-          <div className="h-full">
-            <PackConsistencyPanel pack={pack} />
+          <div className="h-full overflow-y-auto" style={{ background: "var(--surface)" }}>
+            <div className="flex flex-col gap-4 p-4">
+              {job?.logs && job.logs.length > 0 && (
+                <PipelineFlowLogs
+                  logs={job.logs}
+                  currentStage={job.currentStage}
+                  failed={job.status === "failed"}
+                  stageStreams={job.stageStreams}
+                  stageReasoningStreams={job.stageReasoningStreams}
+                  error={job.error}
+                />
+              )}
+              <PackConsistencyPanel pack={pack} />
+            </div>
           </div>
         }
       />

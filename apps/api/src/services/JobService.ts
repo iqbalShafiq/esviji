@@ -14,6 +14,7 @@ export interface JobState {
   latestPreviewUrl?: string;
   latestIteration?: number;
   stageStreams?: Partial<Record<PipelineStage, string>>;
+  stageReasoningStreams?: Partial<Record<PipelineStage, string>>;
   logs: Array<{ stage: PipelineStage; message: string; at: string; progress?: number }>;
   error?: string;
   createdAt: string;
@@ -38,6 +39,7 @@ export class JobService {
       progress: 0,
       logs: [],
       stageStreams: {},
+      stageReasoningStreams: {},
       createdAt: now,
       updatedAt: now,
     };
@@ -103,6 +105,20 @@ export class JobService {
     await this.update(jobId, {
       stageStreams: {
         ...(job.stageStreams ?? {}),
+        [stage]: next,
+      },
+    });
+  }
+
+  async appendStageReasoning(jobId: string, stage: PipelineStage, message: string): Promise<void> {
+    const job = await this.get(jobId);
+    if (!job) return;
+    const current = job.stageReasoningStreams?.[stage] ?? '';
+    const line = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${message.trim()}\n`;
+    const next = (current + line).slice(-5000);
+    await this.update(jobId, {
+      stageReasoningStreams: {
+        ...(job.stageReasoningStreams ?? {}),
         [stage]: next,
       },
     });

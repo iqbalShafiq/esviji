@@ -2,9 +2,10 @@ import type { EvaluationIssue } from "@svg-builder/shared";
 
 interface IssuesPanelProps {
   issues?: EvaluationIssue[];
+  iterationLabel?: string;
 }
 
-export function IssuesPanel({ issues }: IssuesPanelProps) {
+export function IssuesPanel({ issues, iterationLabel = "latest iteration" }: IssuesPanelProps) {
   if (!issues || issues.length === 0) {
     return (
       <div
@@ -31,7 +32,7 @@ export function IssuesPanel({ issues }: IssuesPanelProps) {
           No issues found
         </p>
         <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>
-          Asset passed all evaluations
+          No unresolved issues in the {iterationLabel}
         </p>
       </div>
     );
@@ -77,6 +78,9 @@ export function IssuesPanel({ issues }: IssuesPanelProps) {
           {issues.length}
         </span>
       </div>
+      <p className="text-[10px] font-mono -mt-2" style={{ color: "var(--muted)" }}>
+        These are issues reported by the evaluator for the {iterationLabel}; previous iteration issues may already be resolved.
+      </p>
 
       <div className="flex flex-col gap-2">
         {sortedIssues.map((issue, index) => (

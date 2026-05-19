@@ -8,7 +8,7 @@ export class StyleSystemBuilderService {
     brief: CreativeBrief,
     classification: AssetTypeClassification,
     packPlan?: unknown,
-    options?: { onToken?: (token: string) => void }
+    options?: { onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
   ): Promise<StyleSystem> {
     const { system, user } = buildStyleSystemPrompt({
       brief,
@@ -21,7 +21,7 @@ export class StyleSystemBuilderService {
       system,
       user,
       StyleSystemSchema,
-      { maxRetries: 2, onToken: options?.onToken }
+      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
     );
 
     return styleSystem;

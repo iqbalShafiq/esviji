@@ -38,6 +38,9 @@ export class SvgPacksController {
             onLlmToken: (stage, token) => {
               void this.jobService.appendStageStream(jobId, stage, token);
             },
+            onReasoning: (stage, message) => {
+              void this.jobService.appendStageReasoning(jobId, stage, message);
+            },
           });
           await this.jobService.attachPack(jobId, pack.id);
           await this.jobService.complete(jobId);

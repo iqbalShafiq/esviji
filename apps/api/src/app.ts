@@ -29,6 +29,8 @@ import { SvgAssetsController } from './controllers/svgAssets.controller.js';
 import { SvgPacksController } from './controllers/svgPacks.controller.js';
 import { svgAssetsRoutes } from './routes/svgAssets.routes.js';
 import { registerSvgPackRoutes } from './routes/svgPacks.routes.js';
+import { SvgRepairAgentService } from './agents/SvgRepairAgentService.js';
+import { SvgGenerationWorkflowService } from './agents/SvgGenerationWorkflowService.js';
 import { prisma } from './db/prisma.js';
 
 dotenv.config();
@@ -125,6 +127,11 @@ export async function buildApp() {
     process.env.OPENAI_MODEL ?? 'google/gemini-3.1-flash-lite',
     process.env.OPENAI_BASE_URL ?? 'https://openrouter.ai/api/v1'
   );
+  const langChainModelConfig = {
+    apiKey: apiKey ?? 'no-api-key',
+    model: process.env.OPENAI_MODEL ?? 'google/gemini-3.1-flash-lite',
+    baseUrl: process.env.OPENAI_BASE_URL ?? 'https://openrouter.ai/api/v1',
+  };
 
   // Initialize services
   const storageService = new StorageService();
@@ -145,6 +152,8 @@ export async function buildApp() {
   const consistencyEvaluator = new PackConsistencyEvaluatorService(llmProvider);
   const zipExport = new ZipExportService(storageService);
   const jobService = new JobService();
+  const svgRepairAgent = new SvgRepairAgentService(langChainModelConfig);
+  const svgGenerationWorkflow = new SvgGenerationWorkflowService(svgRepairAgent);
 
   // Initialize orchestrators
   const orchestrator = new SvgBuildOrchestrator(
@@ -161,7 +170,8 @@ export async function buildApp() {
     evaluator,
     revisionPlanner,
     storageService,
-    debugOverlay
+    debugOverlay,
+    svgGenerationWorkflow
   );
 
   const packOrchestrator = new SvgPackBuildOrchestrator(

@@ -8,6 +8,7 @@ export abstract class LlmProvider {
       temperature?: number;
       maxTokens?: number;
       responseFormat?: "json_object";
+      reasoningEffort?: "low" | "medium" | "high";
       onToken?: (token: string) => void;
     }
   ): Promise<string>;
@@ -16,7 +17,12 @@ export abstract class LlmProvider {
     systemPrompt: string,
     userPrompt: string,
     schema: z.ZodSchema<T>,
-    options?: { temperature?: number; maxTokens?: number; onToken?: (token: string) => void }
+    options?: {
+      temperature?: number;
+      maxTokens?: number;
+      reasoningEffort?: "low" | "medium" | "high";
+      onToken?: (token: string) => void;
+    }
   ): Promise<T> {
     const text = await this.generateText(systemPrompt, userPrompt, { ...options, responseFormat: "json_object" });
     const parsed = JSON.parse(text);

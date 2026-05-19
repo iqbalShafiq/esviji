@@ -4,12 +4,14 @@ interface PreviewWorkspaceProps {
   canvas: ReactNode;
   toolbar: ReactNode;
   pipelineRail?: ReactNode;
+  refinementPrompt?: ReactNode;
 }
 
 export function PreviewWorkspace({
   canvas,
   toolbar,
   pipelineRail,
+  refinementPrompt,
 }: PreviewWorkspaceProps) {
   return (
     <div className="flex flex-col h-full">
@@ -22,6 +24,11 @@ export function PreviewWorkspace({
         <div className="flex-1 overflow-hidden">
           {canvas}
         </div>
+        {refinementPrompt && (
+          <div className="shrink-0 border-t" style={{ borderColor: "var(--line)" }}>
+            {refinementPrompt}
+          </div>
+        )}
         <div className="shrink-0 border-t" style={{ borderColor: "var(--line)" }}>
           {toolbar}
         </div>

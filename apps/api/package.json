@@ -12,24 +12,29 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
     "@fastify/cors": "^9.0.0",
-    "@prisma/client": "^5.14.0",
+    "@langchain/core": "^1.1.47",
+    "@langchain/langgraph": "^1.3.2",
+    "@langchain/openai": "^1.4.6",
+    "@prisma/client": "5.14.0",
     "@svg-builder/ai-core": "workspace:*",
     "@svg-builder/shared": "workspace:*",
     "@svg-builder/svg-core": "workspace:*",
     "archiver": "^8.0.0",
     "dotenv": "^16.4.0",
     "fastify": "^4.28.0",
+    "langchain": "^1.4.1",
     "pino": "^8.0.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
     "@types/node": "^20.0.0",
-    "prisma": "^5.14.0",
+    "prisma": "5.14.0",
     "tsx": "^4.11.0",
     "typescript": "^5.4.0"
   }

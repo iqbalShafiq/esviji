@@ -46,6 +46,7 @@ export class SvgPackBuildOrchestrator {
     options?: {
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
+      onReasoning?: (stage: import('@svg-builder/shared').PipelineStage, message: string) => void;
     }
   ): Promise<AssetPack> {
     // Step 1: Create AssetPack record in DB with status "processing"
@@ -63,8 +64,26 @@ export class SvgPackBuildOrchestrator {
     logger.info({ packId: pack.id }, 'AssetPack created, starting pack pipeline');
 
     try {
+      const reportRetry = (
+        stage: import('@svg-builder/shared').PipelineStage,
+        attempt: number,
+        maxRetries: number,
+        error: Error
+      ) => {
+        options?.onReasoning?.(
+          stage,
+          `Retry ${attempt}/${maxRetries}: previous error was "${error.message}". The next attempt receives this context to avoid repeating it.`
+        );
+        options?.onStage?.(
+          stage,
+          `Retrying ${stage} flow ${attempt}/${maxRetries} after error: ${error.message}`,
+          this.retryProgressForStage(stage)
+        );
+      };
+
       // Step 2: Classify asset type using classifier
       options?.onStage?.('classify', 'Classifying pack type', 10);
+      options?.onReasoning?.('classify', 'Reading pack prompt, quantity, output size, and style to classify the shared asset family.');
       const classification = await this.classifier.classify(request.prompt, {
         explicitAssetType: request.assetType,
         quantity: request.quantity,
@@ -73,19 +92,25 @@ export class SvgPackBuildOrchestrator {
         useCase: request.style,
         hasReference: false,
         onToken: (token) => options?.onLlmToken?.('classify', token),
+        onRetry: (attempt, maxRetries, error) => reportRetry('classify', attempt, maxRetries, error),
       });
+      options?.onReasoning?.('classify', `Decision: pack will use ${classification.assetType} assets.`);
 
       // Step 3: Create pack plan using packPlanner
       options?.onStage?.('brief', 'Planning pack items', 20);
+      options?.onReasoning?.('brief', 'Expanding the pack prompt into individual item prompts while preserving set-level coherence.');
       const packPlan = await this.packPlanner.plan(request.prompt, classification, {
         quantity: request.quantity,
         style: request.style,
         items: request.items,
         onToken: (token) => options?.onLlmToken?.('brief', token),
+        onRetry: (attempt, maxRetries, error) => reportRetry('brief', attempt, maxRetries, error),
       });
+      options?.onReasoning?.('brief', `Decision: planned ${packPlan.items.length} pack item(s) under "${packPlan.packName}".`);
 
       // Step 4: Build shared style system using styleBuilder (pass packPlan)
       options?.onStage?.('style', 'Building shared style system', 30);
+      options?.onReasoning?.('style', 'Building one shared visual language so generated pack assets look like a family.');
       const brief: CreativeBrief = {
         assetType: classification.assetType,
         style: {
@@ -112,7 +137,9 @@ export class SvgPackBuildOrchestrator {
 
       const styleSystem = await this.styleBuilder.build(brief, classification, packPlan, {
         onToken: (token) => options?.onLlmToken?.('style', token),
+        onRetry: (attempt, maxRetries, error) => reportRetry('style', attempt, maxRetries, error),
       });
+      options?.onReasoning?.('style', `Decision: use shared style system "${styleSystem.name}" for every pack item.`);
 
       await this.prisma.assetPack.update({
         where: { id: pack.id },
@@ -121,6 +148,7 @@ export class SvgPackBuildOrchestrator {
 
       // Step 5: For each item in packPlan.items, call svgBuildOrchestrator.build
       options?.onStage?.('layout', 'Generating assets in pack', 40);
+      options?.onReasoning?.('layout', 'Generating each pack item with the shared style system and item-specific prompt.');
       for (const item of packPlan.items) {
         const assetRequest = {
           prompt: item.prompt,
@@ -140,6 +168,7 @@ export class SvgPackBuildOrchestrator {
             options?.onStage?.(stage, `[${item.name}] ${message}`, adjusted);
           },
           onLlmToken: (stage, token) => options?.onLlmToken?.(stage, token),
+          onReasoning: (stage, message) => options?.onReasoning?.(stage, `[${item.name}] ${message}`),
         });
 
         logger.info({ packId: pack.id, assetId: asset.id }, 'Pack asset built');
@@ -152,6 +181,7 @@ export class SvgPackBuildOrchestrator {
 
       // Step 7: Evaluate consistency using consistencyEvaluator
       options?.onStage?.('evaluate', 'Evaluating pack consistency', 88);
+      options?.onReasoning?.('evaluate', 'Evaluating whether generated assets are visually consistent as a pack.');
       let evaluations = await this.buildEvaluations(assets);
 
       let consistencyEvaluation = await this.consistencyEvaluator.evaluate(
@@ -159,11 +189,18 @@ export class SvgPackBuildOrchestrator {
         styleSystem,
         assets,
         evaluations,
-        { onToken: (token) => options?.onLlmToken?.('evaluate', token) }
+        {
+          onToken: (token) => options?.onLlmToken?.('evaluate', token),
+          onRetry: (attempt, maxRetries, error) => reportRetry('evaluate', attempt, maxRetries, error),
+        }
       );
 
       // Step 8: For outlier assets (if any), iterate with suggested fixes
       if (consistencyEvaluation.outliers.length > 0) {
+        options?.onReasoning?.(
+          'evaluate',
+          `Decision: found ${consistencyEvaluation.outliers.length} outlier(s); applying suggested fixes and re-evaluating.`
+        );
         logger.info(
           { packId: pack.id, outlierCount: consistencyEvaluation.outliers.length },
           'Outliers detected, iterating fixes'
@@ -195,11 +232,17 @@ export class SvgPackBuildOrchestrator {
           styleSystem,
           assets,
           evaluations,
-          { onToken: (token) => options?.onLlmToken?.('evaluate', token) }
+          {
+            onToken: (token) => options?.onLlmToken?.('evaluate', token),
+            onRetry: (attempt, maxRetries, error) => reportRetry('evaluate', attempt, maxRetries, error),
+          }
         );
+      } else {
+        options?.onReasoning?.('evaluate', 'Decision: no pack outliers detected after consistency evaluation.');
       }
 
       // Step 9: Optimize all SVGs
+      options?.onReasoning?.('optimize', `Optimizing ${assets.length} SVG asset(s) before creating the ZIP export.`);
       for (const asset of assets) {
         if (asset.finalSvgPath) {
           try {
@@ -218,6 +261,7 @@ export class SvgPackBuildOrchestrator {
 
       // Step 10: Generate ZIP using zipExport
       options?.onStage?.('export', 'Exporting pack ZIP', 97);
+      options?.onReasoning?.('export', 'Creating final ZIP bundle with generated assets and pack metadata.');
       const zipPath = await this.zipExport.createZip(
         pack.id,
         assets,
@@ -290,5 +334,21 @@ export class SvgPackBuildOrchestrator {
     }
 
     return evaluations;
+  }
+
+  private retryProgressForStage(stage: import('@svg-builder/shared').PipelineStage): number {
+    const progressByStage: Record<import('@svg-builder/shared').PipelineStage, number> = {
+      classify: 11,
+      brief: 21,
+      style: 31,
+      layout: 41,
+      svg: 52,
+      render: 61,
+      evaluate: 89,
+      revise: 90,
+      optimize: 94,
+      export: 98,
+    };
+    return progressByStage[stage];
   }
 }

@@ -58,6 +58,7 @@ export interface JobResponse {
   latestPreviewUrl?: string;
   latestIteration?: number;
   stageStreams?: Record<string, string>;
+  stageReasoningStreams?: Record<string, string>;
   logs: Array<{ stage: string; message: string; at: string; progress?: number }>;
   error?: string;
 }

@@ -15,7 +15,8 @@ import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { JsonInspector } from "../components/builder/JsonInspector.js";
-import { getAsset } from "../lib/api.js";
+import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
+import { getAsset, iterateSvgAsset } from "../lib/api.js";
 import type { PreviewMode, BackgroundMode, PreviewSize } from "../types/index.js";
 
 export default function AssetDetailPage() {
@@ -23,8 +24,9 @@ export default function AssetDetailPage() {
   const [mode, setMode] = useState<PreviewMode>("final");
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
+  const [isRefining, setIsRefining] = useState(false);
 
-  const { data: asset, isLoading } = useQuery({
+  const { data: asset, isLoading, refetch } = useQuery({
     queryKey: ["asset", assetId],
     queryFn: () => getAsset(assetId!),
     enabled: !!assetId,
@@ -36,6 +38,17 @@ export default function AssetDetailPage() {
     setBackground("transparent");
     setPreviewSize("full");
   }, [assetId]);
+
+  const handleManualRefine = async (instruction: string) => {
+    if (!asset) return;
+    setIsRefining(true);
+    try {
+      await iterateSvgAsset({ assetId: asset.id, instruction });
+      await refetch();
+    } finally {
+      setIsRefining(false);
+    }
+  };
 
   return (
     <StudioFrame>
@@ -142,6 +155,15 @@ export default function AssetDetailPage() {
                 onPreviewSizeChange={setPreviewSize}
               />
             }
+            refinementPrompt={
+              asset ? (
+                <ManualRefinementPrompt
+                  disabled={isLoading || isRefining}
+                  isLoading={isRefining}
+                  onSubmit={handleManualRefine}
+                />
+              ) : undefined
+            }
           />
         }
         rightPanel={
@@ -149,9 +171,11 @@ export default function AssetDetailPage() {
             {asset && (
               <>
                 <ScoresCard scores={asset.evaluation?.scores} />
-                <QualityGates gates={asset.qualityGates} />
+                {asset.qualityGates && asset.qualityGates.length > 0 && (
+                  <QualityGates gates={asset.qualityGates} />
+                )}
                 <IterationTimeline iterations={asset.iterations} />
-                <IssuesPanel issues={asset.evaluation?.issues} />
+                <IssuesPanel issues={asset.evaluation?.issues} iterationLabel="latest/final iteration" />
                 {asset.classification && (
                   <JsonInspector data={asset.classification} title="Classification" />
                 )}

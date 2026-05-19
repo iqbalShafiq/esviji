@@ -10,7 +10,7 @@ export function repairJson(jsonString: string): string {
 
   // Fix unquoted keys (simple cases: word characters only)
   repaired = repaired.replace(
-    /([{\[,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g,
+    /([{[,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g,
     '$1"$2":'
   );
 

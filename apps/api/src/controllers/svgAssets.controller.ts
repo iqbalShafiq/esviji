@@ -55,6 +55,9 @@ export class SvgAssetsController {
             onLlmToken: (stage, token) => {
               void this.jobService.appendStageStream(jobId, stage, token);
             },
+            onReasoning: (stage, message) => {
+              void this.jobService.appendStageReasoning(jobId, stage, message);
+            },
             onIterationRendered: (iteration, previewUrl) => {
               void this.jobService.setLatestPreview(jobId, previewUrl, iteration);
             },

@@ -74,7 +74,7 @@ export class PackPlannerService {
   async plan(
     prompt: string,
     classification: AssetTypeClassification,
-    options?: { items?: string[]; quantity: number; style?: string; onToken?: (token: string) => void }
+    options?: { items?: string[]; quantity: number; style?: string; onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
   ): Promise<PackPlan> {
     const { system, user } = buildPackPlannerPrompt({
       prompt,
@@ -89,7 +89,7 @@ export class PackPlannerService {
       system,
       user,
       PackPlanSchema,
-      { maxRetries: 2, onToken: options?.onToken }
+      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
     );
 
     return plan;

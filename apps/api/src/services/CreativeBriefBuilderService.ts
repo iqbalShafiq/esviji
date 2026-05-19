@@ -13,6 +13,7 @@ export class CreativeBriefBuilderService {
       height: number;
       referenceAnalysis?: unknown;
       onToken?: (token: string) => void;
+      onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
     }
   ): Promise<CreativeBrief> {
     const { system, user } = buildCreativeBriefPrompt({
@@ -29,7 +30,7 @@ export class CreativeBriefBuilderService {
       system,
       user,
       CreativeBriefSchema,
-      { maxRetries: 2, onToken: options?.onToken }
+      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
     );
 
     return brief;

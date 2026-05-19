@@ -45,7 +45,7 @@ const EXTERNAL_URL_REGEX = /^(https?:|data:|javascript:|file:|ftp:)/i;
 const HREF_ATTRIBUTES = new Set(["href", "xlink:href", "src"]);
 
 function extractTagName(tag: string): string {
-  const match = tag.match(/^<\/?([a-zA-Z][a-zA-Z0-9\-]*)/);
+  const match = tag.match(/^<\/?([a-zA-Z][a-zA-Z0-9-]*)/);
   return match ? match[1].toLowerCase() : "";
 }
 
@@ -64,7 +64,7 @@ function sanitizeAttributes(
 ): string {
   // Match all attributes: name="value" or name='value' or name=value or boolean attributes
   const attrRegex =
-    /\s+([a-zA-Z_:][a-zA-Z0-9_:.\-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))|(\s+[a-zA-Z_:][a-zA-Z0-9_:.\-]*)(?=\s|>|\/>)/g;
+    /\s+([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))|(\s+[a-zA-Z_:][a-zA-Z0-9_:.-]*)(?=\s|>|\/>)/g;
   let sanitizedTag = `<${tagName}`;
   let match;
 
@@ -133,7 +133,7 @@ export function validateSvg(svg: string): SvgValidationResult {
   }
 
   // Extract root tag
-  const rootTagMatch = content.match(/^<([a-zA-Z][a-zA-Z0-9\-]*)/);
+  const rootTagMatch = content.match(/^<([a-zA-Z][a-zA-Z0-9-]*)/);
   if (!rootTagMatch) {
     errors.push("No root element found");
     return { valid: false, sanitizedSvg: "", errors, warnings };
@@ -159,9 +159,9 @@ export function validateSvg(svg: string): SvgValidationResult {
   }
 
   // Extract all tags to validate
-  const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9\-]*)([^>]*)>/g;
+  const tagRegex = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>/g;
   const tagStack: string[] = [];
-  let sanitizedParts: string[] = [];
+  const sanitizedParts: string[] = [];
   let lastIndex = 0;
   let match;
 
