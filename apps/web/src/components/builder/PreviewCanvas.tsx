@@ -9,6 +9,7 @@ interface PreviewCanvasProps {
   background: BackgroundMode;
   previewSize: PreviewSize;
   isLoading?: boolean;
+  isRefining?: boolean;
   currentStage?: string;
   loadingPreviewUrl?: string;
   loadingIteration?: number;
@@ -21,6 +22,7 @@ export function PreviewCanvas({
   background,
   previewSize,
   isLoading,
+  isRefining,
   currentStage,
   loadingPreviewUrl,
   loadingIteration,
@@ -185,7 +187,7 @@ export function PreviewCanvas({
       style={bgStyle}
     >
       {/* Loading overlay */}
-      {isLoading && (
+      {(isLoading || isRefining) && (
         <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center z-20 px-3 py-2" style={{ background: "rgba(255,253,247,0.85)", border: "1px solid var(--line)" }}>
           <div className="relative w-8 h-8 mb-3">
             <div
@@ -197,13 +199,25 @@ export function PreviewCanvas({
               className="text-xs font-mono font-medium"
               style={{ color: "var(--blueprint)" }}
             >
-            {(currentStage ?? asset?.currentStage ? (currentStage ?? asset?.currentStage)!.charAt(0).toUpperCase() + (currentStage ?? asset?.currentStage)!.slice(1) : "Initializing")}...
+            {isRefining ? "Refining" : (currentStage ?? asset?.currentStage ? (currentStage ?? asset?.currentStage)!.charAt(0).toUpperCase() + (currentStage ?? asset?.currentStage)!.slice(1) : "Initializing")}...
             </span>
             {typeof loadingIteration === "number" && loadingIteration > 0 && (
               <span className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>
                 Iteration {loadingIteration}
               </span>
             )}
+        </div>
+      )}
+
+      {/* Refining overlay */}
+      {isRefining && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(255,253,247,0.3)" }}>
+          <div className="relative w-12 h-12">
+            <div
+              className="absolute inset-0 border-t-transparent animate-spin rounded-full"
+              style={{ borderColor: "var(--blueprint)", borderTopColor: "transparent", borderWidth: "3px" }}
+            />
+          </div>
         </div>
       )}
 

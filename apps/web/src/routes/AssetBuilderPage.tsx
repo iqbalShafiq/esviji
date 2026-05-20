@@ -120,6 +120,7 @@ export default function AssetBuilderPage() {
                 background={background}
                 previewSize={previewSize}
                 isLoading={isLoading}
+                isRefining={isRefining}
                 currentStage={job?.currentStage}
                 loadingPreviewUrl={job?.latestPreviewUrl}
                 loadingIteration={job?.latestIteration}

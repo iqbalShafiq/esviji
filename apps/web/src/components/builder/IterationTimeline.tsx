@@ -117,7 +117,7 @@ export function IterationTimeline({ iterations }: IterationTimelineProps) {
                   </div>
                 )}
 
-                {it.revisionPlan && (
+                {it.revisionPlan?.strategy && (
                   <p className="text-[10px] font-mono mt-0.5" style={{ color: "var(--muted)" }}>
                     Strategy: {it.revisionPlan.strategy.replace(/_/g, " ")}
                   </p>

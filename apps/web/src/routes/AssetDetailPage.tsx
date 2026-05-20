@@ -143,6 +143,7 @@ export default function AssetDetailPage() {
                 background={background}
                 previewSize={previewSize}
                 isLoading={isLoading}
+                isRefining={isRefining}
               />
             }
             toolbar={
