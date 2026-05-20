@@ -38,7 +38,7 @@ export class PackConsistencyEvaluatorService {
     styleSystem: StyleSystem,
     assets: Asset[],
     scores: EvaluationResult[],
-    options?: { onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
+    options?: { onToken?: (token: string) => void; onReasoning?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
   ): Promise<PackConsistencyEvaluation> {
     const system = `You are a pack consistency evaluator for an AI SVG Asset Builder. Evaluate the consistency of a pack of SVG assets and identify outliers. Return JSON only.`;
 
@@ -116,7 +116,7 @@ Return JSON only, no markdown.`;
       system,
       user,
       PackConsistencyEvaluationSchema,
-      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
+      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
     return result;

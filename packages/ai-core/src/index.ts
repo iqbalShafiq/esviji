@@ -1,5 +1,5 @@
 // Providers
-export { LlmProvider } from "./providers/LlmProvider.js";
+export { LlmProvider, type GenerateTextOptions } from "./providers/LlmProvider.js";
 export { OpenAiProvider } from "./providers/OpenAiProvider.js";
 export { VisionProvider } from "./providers/VisionProvider.js";
 export { ExternalVectorGeneratorProvider } from "./providers/ExternalVectorGeneratorProvider.js";

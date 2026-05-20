@@ -8,14 +8,15 @@ export interface LangChainModelConfig {
 
 export function createLangChainChatModel(
   config: LangChainModelConfig,
-  options?: { temperature?: number; maxRetries?: number }
+  options?: { temperature?: number; maxRetries?: number; useResponsesApi?: boolean }
 ): ChatOpenAI {
   return new ChatOpenAI({
     apiKey: config.apiKey,
     model: config.model,
     temperature: options?.temperature ?? 0.2,
     maxRetries: options?.maxRetries ?? 0,
-    reasoning: { effort: 'medium' },
+    reasoning: { effort: 'medium', summary: 'auto' },
+    useResponsesApi: options?.useResponsesApi ?? false,
     configuration: config.baseUrl ? { baseURL: config.baseUrl } : undefined,
   });
 }

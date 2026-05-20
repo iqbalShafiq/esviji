@@ -98,7 +98,6 @@ export class SvgBuildOrchestrator {
       };
 
       options?.onStage?.('classify', 'Classifying asset type', 10);
-      options?.onReasoning?.('classify', 'Reading prompt, output size, requested style, and reference availability to choose the right asset pipeline.');
       // Step 2: Classify asset type
       const classification = await this.classifier.classify(request.prompt, {
         explicitAssetType: request.assetType,
@@ -107,6 +106,7 @@ export class SvgBuildOrchestrator {
         useCase: request.style,
         hasReference: !!request.referenceImageUrl,
         onToken: (token) => options?.onLlmToken?.('classify', token),
+        onReasoning: (token) => options?.onReasoning?.('classify', token),
         onRetry: (attempt, maxRetries, error) => reportRetry('classify', attempt, maxRetries, error),
       });
 
@@ -119,25 +119,20 @@ export class SvgBuildOrchestrator {
         `Detected asset type: ${classification.assetType} (consistency=${classification.requiresConsistency ? 'yes' : 'no'})`,
         12
       );
-      options?.onReasoning?.(
-        'classify',
-        `Decision: use ${classification.assetType} pipeline; consistency requirement is ${classification.requiresConsistency ? 'enabled' : 'not required'}.`
-      );
 
       // Step 3: Analyze reference if provided
       let referenceAnalysis: unknown | undefined;
       if (request.referenceImageUrl) {
         options?.onStage?.('brief', 'Analyzing reference image', 15);
-        options?.onReasoning?.('brief', 'Reference image detected; extracting visual constraints before writing the creative brief.');
         referenceAnalysis = await this.referenceAnalyzer.analyze(request.referenceImageUrl, {
           onToken: (token) => options?.onLlmToken?.('brief', token),
+          onReasoning: (token) => options?.onReasoning?.('brief', token),
           onRetry: (attempt, maxRetries, error) => reportRetry('brief', attempt, maxRetries, error),
         });
         logger.info({ assetId: asset.id }, 'Reference analysis completed');
       }
 
       options?.onStage?.('brief', 'Building creative brief', 20);
-      options?.onReasoning?.('brief', 'Converting the prompt into concrete subject, mood, composition, and must-have visual constraints.');
       // Step 4: Build creative brief
       const brief = await this.briefBuilder.build(request.prompt, classification, {
         style: request.style,
@@ -145,6 +140,7 @@ export class SvgBuildOrchestrator {
         height: request.output.height,
         referenceAnalysis,
         onToken: (token) => options?.onLlmToken?.('brief', token),
+        onReasoning: (token) => options?.onReasoning?.('brief', token),
         onRetry: (attempt, maxRetries, error) => reportRetry('brief', attempt, maxRetries, error),
       });
       options?.onStage?.(
@@ -152,16 +148,12 @@ export class SvgBuildOrchestrator {
         `Brief ready: subject="${brief.composition.mainFocus}" mood="${brief.style.mood}"`,
         24
       );
-      options?.onReasoning?.(
-        'brief',
-        `Decision: focus on "${brief.composition.mainFocus}" with "${brief.style.mood}" mood so later flows have a stable target.`
-      );
 
       options?.onStage?.('style', 'Building style system', 30);
-      options?.onReasoning?.('style', 'Deriving palette, stroke/fill behavior, typography/icon rules, and reusable style constraints from the brief.');
       // Step 5: Build style system (use shared if provided)
       const styleSystem = options?.sharedStyleSystem ?? await this.styleBuilder.build(brief, classification, undefined, {
         onToken: (token) => options?.onLlmToken?.('style', token),
+        onReasoning: (token) => options?.onReasoning?.('style', token),
         onRetry: (attempt, maxRetries, error) => reportRetry('style', attempt, maxRetries, error),
       });
       options?.onStage?.(
@@ -169,13 +161,8 @@ export class SvgBuildOrchestrator {
         `Style system: ${styleSystem.name} with ${Object.keys(styleSystem.palette).length} palette roles`,
         34
       );
-      options?.onReasoning?.(
-        'style',
-        `Decision: use "${styleSystem.name}" style system with ${Object.keys(styleSystem.palette).length} palette roles.`
-      );
 
       options?.onStage?.('layout', 'Planning asset strategy and layout', 40);
-      options?.onReasoning?.('layout', 'Planning layer hierarchy, anchors, sizing, and viewBox-safe composition before generating SVG code.');
       // Step 6: Plan asset
       await this.assetPlanner.plan(classification, brief, styleSystem, referenceAnalysis);
 
@@ -189,6 +176,7 @@ export class SvgBuildOrchestrator {
         referenceAnalysis,
         {
           onToken: (token) => options?.onLlmToken?.('layout', token),
+          onReasoning: (token) => options?.onReasoning?.('layout', token),
           onRetry: (attempt, maxRetries, error) => reportRetry('layout', attempt, maxRetries, error),
         }
       );
@@ -196,10 +184,6 @@ export class SvgBuildOrchestrator {
         'layout',
         `Layout planned: ${layout.layers.length} layers on ${layout.canvas.width}x${layout.canvas.height}`,
         44
-      );
-      options?.onReasoning?.(
-        'layout',
-        `Decision: use ${layout.layers.length} planned layer(s) on a ${layout.canvas.width}x${layout.canvas.height} canvas.`
       );
 
       // Steps 8-13: Iteration loop
@@ -213,10 +197,6 @@ export class SvgBuildOrchestrator {
         logger.info({ assetId: asset.id, iteration }, `Starting iteration ${iteration}`);
 
         options?.onStage?.('svg', `Generating SVG iteration ${iteration}`, 50);
-        options?.onReasoning?.(
-          'svg',
-          `Generating iteration ${iteration}: converting layout layers and style rules into safe inline SVG markup.`
-        );
         // Steps 8-9: Generate, validate, and preflight-render SVG with retry context.
         const initialSvg = await this.generateSvgDraft({
           iteration,
@@ -226,6 +206,7 @@ export class SvgBuildOrchestrator {
           currentSvg,
           lastRevisionPlan,
           onToken: (token) => options?.onLlmToken?.('svg', token),
+          onReasoning: (token) => options?.onReasoning?.('svg', token),
         });
 
         const generated = await this.svgGenerationWorkflow.run({
@@ -237,9 +218,9 @@ export class SvgBuildOrchestrator {
           initialSvg,
           revisionInstruction: lastRevisionPlan?.notes,
           onToken: (token) => options?.onLlmToken?.('svg', token),
+          onReasoning: (token) => options?.onReasoning?.('svg', token),
           onToolEvent: (message) => {
             options?.onStage?.('svg', message, 52);
-            options?.onReasoning?.('svg', `Tool event: ${message}`);
           },
           onRetry: (attempt, maxRetries, error) =>
             reportRetry('svg', attempt, maxRetries, error),
@@ -248,13 +229,8 @@ export class SvgBuildOrchestrator {
         currentSvg = generated.svg;
         lastValidationSummary = generated.validationSummary;
         options?.onStage?.('svg', `SVG draft ready (${Math.round(currentSvg.length / 1024)} KB)`, 56);
-        options?.onReasoning?.(
-          'svg',
-          `Decision: SVG passed validation and render preflight with ${generated.validationSummary.warnings.length} warning(s).`
-        );
 
         options?.onStage?.('render', `Rendering preview iteration ${iteration}`, 60);
-        options?.onReasoning?.('render', `Rendering iteration ${iteration} to PNG preview to verify the SVG is visually inspectable.`);
         // Step 10: Render PNG
         const { pngPath, pngUrl } = await this.svgRender.render(
           currentSvg,
@@ -274,10 +250,6 @@ export class SvgBuildOrchestrator {
         );
 
         options?.onStage?.('evaluate', `Evaluating iteration ${iteration}`, 70);
-        options?.onReasoning?.(
-          'evaluate',
-          `Evaluating iteration ${iteration}: checking visual quality, technical correctness, and fit against the latest brief.`
-        );
         // Step 12: Evaluate
         evaluation = await this.evaluator.evaluate(
           classification,
@@ -288,6 +260,7 @@ export class SvgBuildOrchestrator {
           referenceAnalysis,
           {
             onToken: (token) => options?.onLlmToken?.('evaluate', token),
+            onReasoning: (token) => options?.onReasoning?.('evaluate', token),
             svgSource: currentSvg,
             validationSummary: lastValidationSummary,
             previousEvaluationContext: evaluation
@@ -308,10 +281,6 @@ export class SvgBuildOrchestrator {
             .map(([k, v]) => `${k}=${v}`)
             .join(', ')}`,
           74
-        );
-        options?.onReasoning?.(
-          'evaluate',
-          `Decision: evaluator found ${evaluation.issues.length} issue(s); continueIteration=${evaluation.continueIteration ? 'yes' : 'no'}.`
         );
 
         // Save iteration record
@@ -354,10 +323,6 @@ export class SvgBuildOrchestrator {
 
         if (iteration < request.maxIterations) {
           options?.onStage?.('revise', `Planning revision from iteration ${iteration}`, 80);
-          options?.onReasoning?.(
-            'revise',
-            `Planning targeted fixes for ${evaluation.issues.length} evaluator issue(s) before the next SVG iteration.`
-          );
           lastRevisionPlan = await this.revisionPlanner.plan(
             currentLayout,
             currentSvg,
@@ -366,6 +331,7 @@ export class SvgBuildOrchestrator {
             classification,
             {
               onToken: (token) => options?.onLlmToken?.('revise', token),
+              onReasoning: (token) => options?.onReasoning?.('revise', token),
               onRetry: (attempt, maxRetries, error) => reportRetry('revise', attempt, maxRetries, error),
             }
           );
@@ -376,15 +342,11 @@ export class SvgBuildOrchestrator {
               ...currentLayout,
               ...(lastRevisionPlan.updatedLayout as Record<string, unknown>),
             } as LayoutBlueprint;
-            options?.onReasoning?.('revise', 'Decision: revision plan includes layout updates, so the next iteration will use the adjusted layout.');
-          } else {
-            options?.onReasoning?.('revise', 'Decision: revision plan keeps the layout stable and focuses on SVG/code-level fixes.');
           }
         }
       }
 
       options?.onStage?.('optimize', 'Sanitizing and optimizing final SVG', 90);
-      options?.onReasoning?.('optimize', 'Sanitizing and optimizing final SVG before export to remove unsafe or redundant markup.');
       // Step 14: Sanitize final SVG
       const sanitizedSvg = sanitizeSvg(currentSvg);
 
@@ -392,7 +354,6 @@ export class SvgBuildOrchestrator {
       const optimizationResult = await this.svgOptimizer.optimize(sanitizedSvg);
 
       options?.onStage?.('export', 'Saving final outputs', 98);
-      options?.onReasoning?.('export', 'Saving final SVG and PNG outputs after the optimized SVG is accepted.');
       // Step 16: Save final files
       const finalSvgPath = await this.storage.saveAssetFile(asset.id, 'final.svg', optimizationResult.optimizedSvg);
       const finalSvgUrl = `/${finalSvgPath}`;
@@ -595,10 +556,12 @@ export class SvgBuildOrchestrator {
     currentSvg: string;
     lastRevisionPlan?: RevisionPlan;
     onToken?: (token: string) => void;
+    onReasoning?: (token: string) => void;
   }): Promise<string> {
     if (input.iteration === 1) {
       return this.svgCoder.code(input.brief, input.styleSystem, input.layout, {
         onToken: input.onToken,
+        onReasoning: input.onReasoning,
       });
     }
 
@@ -630,6 +593,7 @@ export class SvgBuildOrchestrator {
             input.lastRevisionPlan.notes
           }\nThe previous layer_transform plan failed, so regenerate the SVG instead. Transform errors:\n${transformErrors.join('\n')}`,
           onToken: input.onToken,
+          onReasoning: input.onReasoning,
         });
       }
 
@@ -637,6 +601,7 @@ export class SvgBuildOrchestrator {
         previousSvg: input.currentSvg,
         revisionInstruction: input.lastRevisionPlan.notes,
         onToken: input.onToken,
+        onReasoning: input.onReasoning,
       });
     }
 
@@ -644,6 +609,7 @@ export class SvgBuildOrchestrator {
       previousSvg: input.currentSvg,
       revisionInstruction: 'Improve based on previous evaluation.',
       onToken: input.onToken,
+      onReasoning: input.onReasoning,
     });
   }
 }

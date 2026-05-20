@@ -32,6 +32,7 @@ export async function generateStructuredOutput<T>(
   options?: {
     maxRetries?: number;
     onToken?: (token: string) => void;
+    onReasoning?: (token: string) => void;
     onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
   }
 ): Promise<T> {
@@ -45,6 +46,7 @@ export async function generateStructuredOutput<T>(
         responseFormat: "json_object",
         reasoningEffort: "medium",
         onToken: options?.onToken,
+        onReasoning: options?.onReasoning,
       });
       const parsedJson = JSON.parse(repairJson(text));
       const parsed = schema.parse(parsedJson);

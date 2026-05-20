@@ -5,9 +5,6 @@ import type { CreativeBrief, LayoutBlueprint, StyleSystem } from '@svg-builder/s
 import { createLangChainChatModel, type LangChainModelConfig } from './langChainModelFactory.js';
 import { inspectSvgStructure } from './svgStructureInspector.js';
 
-type AgentStreamMessages = AsyncIterable<{ text: AsyncIterable<string> }>;
-type AgentToolCalls = AsyncIterable<{ name: string; output: Promise<unknown> }>;
-
 const SvgRepairResponseSchema = z.object({
   svg: z.string().describe('The complete corrected SVG markup.'),
 });
@@ -22,6 +19,7 @@ export interface SvgRepairAgentInput {
   width: number;
   height: number;
   onToken?: (token: string) => void;
+  onReasoning?: (token: string) => void;
   onToolEvent?: (message: string) => void;
 }
 
@@ -31,7 +29,7 @@ export class SvgRepairAgentService {
   async repair(input: SvgRepairAgentInput): Promise<string> {
     const tools = this.createTools(input);
     const agent = createAgent({
-      model: createLangChainChatModel(this.modelConfig, { temperature: 0.15, maxRetries: 0 }),
+      model: createLangChainChatModel(this.modelConfig, { temperature: 0.15, maxRetries: 0, useResponsesApi: true }),
       tools,
       responseFormat: toolStrategy(SvgRepairResponseSchema),
       prompt: this.buildSystemPrompt(),
@@ -49,13 +47,21 @@ export class SvgRepairAgentService {
       { version: 'v3', recursionLimit: 12 }
     );
 
-    await Promise.all([
-      this.forwardMessageTokens(run.messages, input.onToken),
-      this.forwardToolEvents(run.toolCalls, input.onToolEvent),
-    ]);
+    // Forward streaming tokens, reasoning, and tool calls concurrently
+    const streamPromises: Promise<void>[] = [];
+    for await (const message of run.messages) {
+      streamPromises.push(
+        this.forwardStream(message.text, input.onToken),
+        this.forwardStream(message.reasoning, input.onReasoning),
+        this.forwardToolCalls(message.toolCalls, input.onToolEvent)
+      );
+    }
+    await Promise.all(streamPromises);
 
-    const output = await run.output;
-    const structured = output.structuredResponse as z.infer<typeof SvgRepairResponseSchema> | undefined;
+    const finalState = await run.output;
+    const structured = (finalState as Record<string, unknown>)?.structuredResponse as
+      | z.infer<typeof SvgRepairResponseSchema>
+      | undefined;
     const svg = structured?.svg?.trim();
 
     if (!svg) {
@@ -150,21 +156,25 @@ Previous SVG:
 ${input.previousSvg}`;
   }
 
-  private async forwardMessageTokens(messages: AgentStreamMessages, onToken?: (token: string) => void): Promise<void> {
-    if (!onToken) return;
-    for await (const message of messages) {
-      for await (const token of message.text) {
-        onToken(token);
-      }
+  private async forwardStream(
+    stream: AsyncIterable<string> | undefined,
+    onChunk?: (chunk: string) => void
+  ): Promise<void> {
+    if (!stream || !onChunk) return;
+    for await (const chunk of stream) {
+      onChunk(chunk);
     }
   }
 
-  private async forwardToolEvents(toolCalls: AgentToolCalls, onToolEvent?: (message: string) => void): Promise<void> {
-    if (!onToolEvent) return;
+  private async forwardToolCalls(
+    toolCalls: AsyncIterable<Record<string, unknown>> | undefined,
+    onToolEvent?: (message: string) => void
+  ): Promise<void> {
+    if (!toolCalls || !onToolEvent) return;
     for await (const call of toolCalls) {
-      onToolEvent(`Calling repair tool: ${call.name}`);
-      await call.output;
-      onToolEvent(`Repair tool completed: ${call.name}`);
+      const name = typeof call.name === 'string' ? call.name : 'unknown';
+      onToolEvent(`Calling repair tool: ${name}`);
+      onToolEvent(`Repair tool completed: ${name}`);
     }
   }
 }

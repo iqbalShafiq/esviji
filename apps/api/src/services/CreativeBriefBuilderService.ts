@@ -13,6 +13,7 @@ export class CreativeBriefBuilderService {
       height: number;
       referenceAnalysis?: unknown;
       onToken?: (token: string) => void;
+      onReasoning?: (token: string) => void;
       onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
     }
   ): Promise<CreativeBrief> {
@@ -30,7 +31,7 @@ export class CreativeBriefBuilderService {
       system,
       user,
       CreativeBriefSchema,
-      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
+      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
     return brief;

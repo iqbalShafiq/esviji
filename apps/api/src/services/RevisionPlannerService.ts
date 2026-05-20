@@ -10,7 +10,7 @@ export class RevisionPlannerService {
     issues: EvaluationIssue[],
     currentIteration: number,
     classification: AssetTypeClassification,
-    options?: { onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
+    options?: { onToken?: (token: string) => void; onReasoning?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
   ): Promise<RevisionPlan> {
     const { system, user } = buildRevisionPlannerPrompt({
       classification,
@@ -25,7 +25,7 @@ export class RevisionPlannerService {
       system,
       user,
       RevisionPlanSchema,
-      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
+      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
     return plan;

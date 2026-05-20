@@ -24,6 +24,7 @@ export interface SvgGenerationWorkflowInput {
   revisionInstruction?: string;
   onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
   onToken?: (token: string) => void;
+  onReasoning?: (token: string) => void;
   onToolEvent?: (message: string) => void;
 }
 
@@ -142,6 +143,7 @@ export class SvgGenerationWorkflowService {
         width: input.width,
         height: input.height,
         onToken: input.onToken,
+        onReasoning: input.onReasoning,
         onToolEvent: input.onToolEvent,
       });
       errorContext = '';

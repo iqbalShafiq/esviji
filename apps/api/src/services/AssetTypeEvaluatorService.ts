@@ -15,6 +15,7 @@ export class AssetTypeEvaluatorService {
     referenceAnalysis?: unknown,
     options?: {
       onToken?: (token: string) => void;
+      onReasoning?: (token: string) => void;
       onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
       svgSource?: string;
       validationSummary?: { valid: boolean; errors: string[]; warnings: string[] };
@@ -46,7 +47,7 @@ export class AssetTypeEvaluatorService {
       system,
       user,
       EvaluationResultSchema,
-      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
+      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
     // Check against quality thresholds

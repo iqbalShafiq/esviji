@@ -130,8 +130,7 @@ export class JobService {
   async appendStageReasoning(jobId: string, stage: PipelineStage, message: string): Promise<void> {
     await this.mutate(jobId, (job) => {
       const current = job.stageReasoningStreams?.[stage] ?? '';
-      const line = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${message.trim()}\n`;
-      const next = (current + line).slice(-5000);
+      const next = (current + message).slice(-5000);
       return {
         status: 'running',
         currentStage: stage,
@@ -139,7 +138,7 @@ export class JobService {
           ...(job.stageReasoningStreams ?? {}),
           [stage]: next,
         },
-        streamEvents: this.appendStreamEvent(job, 'reasoning', stage, line),
+        streamEvents: this.appendStreamEvent(job, 'reasoning', stage, message),
       };
     });
   }

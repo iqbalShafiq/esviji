@@ -12,7 +12,7 @@ export class LayoutPlannerService {
     width: number,
     height: number,
     referenceAnalysis?: unknown,
-    options?: { onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
+    options?: { onToken?: (token: string) => void; onReasoning?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }
   ): Promise<LayoutBlueprint> {
     const { system, user } = buildLayoutPlannerPrompt({
       brief,
@@ -28,7 +28,7 @@ export class LayoutPlannerService {
       system,
       user,
       LayoutBlueprintSchema,
-      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
+      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
     // Convert normalized bounds to pixel bounds for each layer

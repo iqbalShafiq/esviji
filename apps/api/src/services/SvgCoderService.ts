@@ -15,6 +15,7 @@ export class SvgCoderService {
       revisionInstruction?: string;
       previousErrorContext?: string;
       onToken?: (token: string) => void;
+      onReasoning?: (token: string) => void;
       onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
     }
   ): Promise<string> {
@@ -33,6 +34,7 @@ export class SvgCoderService {
         maxTokens: 4096,
         reasoningEffort: 'medium',
         onToken: options?.onToken,
+        onReasoning: options?.onReasoning,
       });
 
       let cleaned = svg.trim();

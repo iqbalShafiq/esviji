@@ -21,7 +21,7 @@ export type ReferenceAnalysis = z.infer<typeof ReferenceAnalysisSchema>;
 export class ReferenceAnalyzerService {
   constructor(private llmProvider: LlmProvider) {}
 
-  async analyze(referenceImageUrl: string, options?: { onToken?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }): Promise<ReferenceAnalysis> {
+  async analyze(referenceImageUrl: string,     options?: { onToken?: (token: string) => void; onReasoning?: (token: string) => void; onRetry?: (attempt: number, maxRetries: number, error: Error) => void }): Promise<ReferenceAnalysis> {
     // Download image
     const response = await fetch(referenceImageUrl);
     if (!response.ok) {
@@ -44,7 +44,7 @@ export class ReferenceAnalyzerService {
       system,
       user,
       ReferenceAnalysisSchema,
-      { maxRetries: 3, onToken: options?.onToken, onRetry: options?.onRetry }
+      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
     return analysis;
