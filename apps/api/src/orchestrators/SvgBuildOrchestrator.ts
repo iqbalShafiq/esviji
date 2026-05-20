@@ -8,7 +8,7 @@ import type {
   BuildSvgAssetRequest,
   IterateSvgAssetRequest,
 } from '@svg-builder/shared';
-import type { Asset, AssetIteration } from '@prisma/client';
+import type { Asset } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma.js';
 import { logger } from '../utils/logger.js';
@@ -177,7 +177,7 @@ export class SvgBuildOrchestrator {
       options?.onStage?.('layout', 'Planning asset strategy and layout', 40);
       options?.onReasoning?.('layout', 'Planning layer hierarchy, anchors, sizing, and viewBox-safe composition before generating SVG code.');
       // Step 6: Plan asset
-      const assetPlan = await this.assetPlanner.plan(classification, brief, styleSystem, referenceAnalysis);
+      await this.assetPlanner.plan(classification, brief, styleSystem, referenceAnalysis);
 
       // Step 7: Plan layout
       const layout = await this.layoutPlanner.plan(
@@ -290,6 +290,14 @@ export class SvgBuildOrchestrator {
             onToken: (token) => options?.onLlmToken?.('evaluate', token),
             svgSource: currentSvg,
             validationSummary: lastValidationSummary,
+            previousEvaluationContext: evaluation
+              ? {
+                  iteration: iteration - 1,
+                  scores: evaluation.scores,
+                  issues: evaluation.issues,
+                  revisionPlan: lastRevisionPlan,
+                }
+              : undefined,
             onRetry: (attempt, maxRetries, error) => reportRetry('evaluate', attempt, maxRetries, error),
           }
         );
@@ -505,6 +513,12 @@ export class SvgBuildOrchestrator {
         {
           svgSource: currentSvg,
           validationSummary: generated.validationSummary,
+          previousEvaluationContext: {
+            iteration: latestIteration.iterationNumber,
+            scores: latestIteration.scores,
+            issues: latestIteration.issues,
+            revisionPlan: latestIteration.actionTaken,
+          },
         }
       );
 

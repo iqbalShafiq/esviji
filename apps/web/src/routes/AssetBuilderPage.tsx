@@ -76,6 +76,12 @@ export default function AssetBuilderPage() {
       onError: () => {
         setIsLoading(false);
       },
+      onModelToken: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, "stageStreams", stage, content));
+      },
+      onReasoning: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, "stageReasoningStreams", stage, content));
+      },
     });
 
     return () => {
@@ -170,7 +176,7 @@ export default function AssetBuilderPage() {
                 )}
               </>
             )}
-            {job?.logs && job.logs.length > 0 && (
+            {hasPipelineData(job) && (
               <PipelineFlowLogs
                 logs={job.logs}
                 currentStage={job.currentStage}
@@ -194,5 +200,31 @@ export default function AssetBuilderPage() {
         }
       />
     </StudioFrame>
+  );
+}
+
+function appendJobStream(
+  job: JobResponse | undefined,
+  key: "stageStreams" | "stageReasoningStreams",
+  stage: string,
+  content: string
+): JobResponse | undefined {
+  if (!job) return job;
+  const streams = job[key] ?? {};
+  return {
+    ...job,
+    [key]: {
+      ...streams,
+      [stage]: `${streams[stage] ?? ""}${content}`,
+    },
+  };
+}
+
+function hasPipelineData(job: JobResponse | undefined): job is JobResponse {
+  if (!job) return false;
+  return (
+    job.logs.length > 0 ||
+    Object.keys(job.stageStreams ?? {}).length > 0 ||
+    Object.keys(job.stageReasoningStreams ?? {}).length > 0
   );
 }

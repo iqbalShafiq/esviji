@@ -4,6 +4,14 @@ import type { PipelineStage } from '@svg-builder/shared';
 
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
+export type JobStreamEvent = {
+  sequence: number;
+  type: 'model' | 'reasoning';
+  stage: PipelineStage;
+  content: string;
+  at: string;
+};
+
 export interface JobState {
   jobId: string;
   assetId?: string;
@@ -15,6 +23,7 @@ export interface JobState {
   latestIteration?: number;
   stageStreams?: Partial<Record<PipelineStage, string>>;
   stageReasoningStreams?: Partial<Record<PipelineStage, string>>;
+  streamEvents?: JobStreamEvent[];
   logs: Array<{ stage: PipelineStage; message: string; at: string; progress?: number }>;
   error?: string;
   createdAt: string;
@@ -24,6 +33,7 @@ export interface JobState {
 export class JobService {
   private baseDir: string;
   private cache = new Map<string, JobState>();
+  private mutationQueues = new Map<string, Promise<void>>();
 
   constructor(baseDir?: string) {
     this.baseDir = baseDir ?? path.resolve(process.cwd(), process.env.LOCAL_STORAGE_DIR || './storage', 'jobs');
@@ -40,6 +50,7 @@ export class JobService {
       logs: [],
       stageStreams: {},
       stageReasoningStreams: {},
+      streamEvents: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -65,15 +76,18 @@ export class JobService {
   }
 
   async stage(jobId: string, stage: PipelineStage, progress: number, message: string): Promise<void> {
-    const job = await this.get(jobId);
-    if (!job) return;
-    await this.persist({
-      ...job,
+    await this.mutate(jobId, (job) => ({
       status: 'running',
       currentStage: stage,
       progress,
       logs: [...job.logs, { stage, message, at: new Date().toISOString(), progress }],
-      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  async ensureStage(jobId: string, stage: PipelineStage): Promise<void> {
+    await this.mutate(jobId, (job) => {
+      if (job.currentStage === stage) return {};
+      return { status: 'running', currentStage: stage };
     });
   }
 
@@ -98,42 +112,84 @@ export class JobService {
   }
 
   async appendStageStream(jobId: string, stage: PipelineStage, token: string): Promise<void> {
-    const job = await this.get(jobId);
-    if (!job) return;
-    const current = job.stageStreams?.[stage] ?? '';
-    const next = (current + token).slice(-4000);
-    await this.update(jobId, {
-      stageStreams: {
-        ...(job.stageStreams ?? {}),
-        [stage]: next,
-      },
+    await this.mutate(jobId, (job) => {
+      const current = job.stageStreams?.[stage] ?? '';
+      const next = (current + token).slice(-4000);
+      return {
+        status: 'running',
+        currentStage: stage,
+        stageStreams: {
+          ...(job.stageStreams ?? {}),
+          [stage]: next,
+        },
+        streamEvents: this.appendStreamEvent(job, 'model', stage, token),
+      };
     });
   }
 
   async appendStageReasoning(jobId: string, stage: PipelineStage, message: string): Promise<void> {
-    const job = await this.get(jobId);
-    if (!job) return;
-    const current = job.stageReasoningStreams?.[stage] ?? '';
-    const line = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${message.trim()}\n`;
-    const next = (current + line).slice(-5000);
-    await this.update(jobId, {
-      stageReasoningStreams: {
-        ...(job.stageReasoningStreams ?? {}),
-        [stage]: next,
-      },
+    await this.mutate(jobId, (job) => {
+      const current = job.stageReasoningStreams?.[stage] ?? '';
+      const line = `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${message.trim()}\n`;
+      const next = (current + line).slice(-5000);
+      return {
+        status: 'running',
+        currentStage: stage,
+        stageReasoningStreams: {
+          ...(job.stageReasoningStreams ?? {}),
+          [stage]: next,
+        },
+        streamEvents: this.appendStreamEvent(job, 'reasoning', stage, line),
+      };
     });
   }
 
-  private async update(jobId: string, patch: Partial<JobState>): Promise<void> {
+  async getStreamEventsAfter(jobId: string, sequence: number): Promise<JobStreamEvent[]> {
     const job = await this.get(jobId);
-    if (!job) return;
-    await this.persist({ ...job, ...patch, updatedAt: new Date().toISOString() });
+    if (!job) return [];
+    return (job.streamEvents ?? []).filter((event) => event.sequence > sequence);
+  }
+
+  private async update(jobId: string, patch: Partial<JobState>): Promise<void> {
+    await this.mutate(jobId, () => patch);
+  }
+
+  private async mutate(jobId: string, producer: (job: JobState) => Partial<JobState>): Promise<void> {
+    const previous = this.mutationQueues.get(jobId) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      const job = await this.get(jobId);
+      if (!job) return;
+      const patch = producer(job);
+      await this.persist({ ...job, ...patch, updatedAt: new Date().toISOString() });
+    });
+    this.mutationQueues.set(jobId, next.catch(() => undefined));
+    await next;
   }
 
   private async persist(job: JobState): Promise<void> {
     await mkdir(this.baseDir, { recursive: true });
     this.cache.set(job.jobId, job);
     await writeFile(this.getJobPath(job.jobId), JSON.stringify(job, null, 2), 'utf-8');
+  }
+
+  private appendStreamEvent(
+    job: JobState,
+    type: JobStreamEvent['type'],
+    stage: PipelineStage,
+    content: string
+  ): JobStreamEvent[] {
+    const events = job.streamEvents ?? [];
+    const lastSequence = events[events.length - 1]?.sequence ?? 0;
+    return [
+      ...events,
+      {
+        sequence: lastSequence + 1,
+        type,
+        stage,
+        content,
+        at: new Date().toISOString(),
+      },
+    ].slice(-1000);
   }
 
   private getJobPath(jobId: string): string {

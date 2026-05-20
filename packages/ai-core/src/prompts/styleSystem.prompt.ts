@@ -1,7 +1,7 @@
 export function buildStyleSystemPrompt(params: {
-  brief: any;
-  classification: any;
-  packPlan?: any;
+  brief: unknown;
+  classification: unknown;
+  packPlan?: unknown;
 }): { system: string; user: string } {
   const system = `You are a style system designer for SVG assets. Define a cohesive, reusable style system based on the creative brief and classification. Return JSON only.`;
 

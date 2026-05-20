@@ -14,7 +14,7 @@ export default function PackBuilderPage() {
   const [pack, setPack] = useState<PackResponse | undefined>();
   const [jobId, setJobId] = useState<string | undefined>();
   const [job, setJob] = useState<JobResponse | undefined>();
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmitStart = () => {
@@ -50,6 +50,12 @@ export default function PackBuilderPage() {
       },
       onError: () => {
         setIsLoading(false);
+      },
+      onModelToken: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, "stageStreams", stage, content));
+      },
+      onReasoning: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, "stageReasoningStreams", stage, content));
       },
     });
 
@@ -121,7 +127,7 @@ export default function PackBuilderPage() {
         rightPanel={
           <div className="h-full overflow-y-auto" style={{ background: "var(--surface)" }}>
             <div className="flex flex-col gap-4 p-4">
-              {job?.logs && job.logs.length > 0 && (
+              {hasPipelineData(job) && (
                 <PipelineFlowLogs
                   logs={job.logs}
                   currentStage={job.currentStage}
@@ -137,5 +143,31 @@ export default function PackBuilderPage() {
         }
       />
     </StudioFrame>
+  );
+}
+
+function appendJobStream(
+  job: JobResponse | undefined,
+  key: "stageStreams" | "stageReasoningStreams",
+  stage: string,
+  content: string
+): JobResponse | undefined {
+  if (!job) return job;
+  const streams = job[key] ?? {};
+  return {
+    ...job,
+    [key]: {
+      ...streams,
+      [stage]: `${streams[stage] ?? ""}${content}`,
+    },
+  };
+}
+
+function hasPipelineData(job: JobResponse | undefined): job is JobResponse {
+  if (!job) return false;
+  return (
+    job.logs.length > 0 ||
+    Object.keys(job.stageStreams ?? {}).length > 0 ||
+    Object.keys(job.stageReasoningStreams ?? {}).length > 0
   );
 }

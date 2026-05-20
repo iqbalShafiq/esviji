@@ -5,6 +5,9 @@ import type { CreativeBrief, LayoutBlueprint, StyleSystem } from '@svg-builder/s
 import { createLangChainChatModel, type LangChainModelConfig } from './langChainModelFactory.js';
 import { inspectSvgStructure } from './svgStructureInspector.js';
 
+type AgentStreamMessages = AsyncIterable<{ text: AsyncIterable<string> }>;
+type AgentToolCalls = AsyncIterable<{ name: string; output: Promise<unknown> }>;
+
 const SvgRepairResponseSchema = z.object({
   svg: z.string().describe('The complete corrected SVG markup.'),
 });
@@ -32,7 +35,7 @@ export class SvgRepairAgentService {
       tools,
       responseFormat: toolStrategy(SvgRepairResponseSchema),
       prompt: this.buildSystemPrompt(),
-    } as any);
+    } as unknown as Parameters<typeof createAgent>[0]);
 
     const run = await agent.streamEvents(
       {
@@ -147,7 +150,7 @@ Previous SVG:
 ${input.previousSvg}`;
   }
 
-  private async forwardMessageTokens(messages: any, onToken?: (token: string) => void): Promise<void> {
+  private async forwardMessageTokens(messages: AgentStreamMessages, onToken?: (token: string) => void): Promise<void> {
     if (!onToken) return;
     for await (const message of messages) {
       for await (const token of message.text) {
@@ -156,7 +159,7 @@ ${input.previousSvg}`;
     }
   }
 
-  private async forwardToolEvents(toolCalls: any, onToolEvent?: (message: string) => void): Promise<void> {
+  private async forwardToolEvents(toolCalls: AgentToolCalls, onToolEvent?: (message: string) => void): Promise<void> {
     if (!onToolEvent) return;
     for await (const call of toolCalls) {
       onToolEvent(`Calling repair tool: ${call.name}`);

@@ -28,7 +28,7 @@ export async function generateStructuredOutput<T>(
   provider: LlmProvider,
   systemPrompt: string,
   userPrompt: string,
-  schema: z.ZodType<T, any, any>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   options?: {
     maxRetries?: number;
     onToken?: (token: string) => void;

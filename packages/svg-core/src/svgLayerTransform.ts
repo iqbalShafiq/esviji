@@ -43,8 +43,6 @@ export function applyTransformToLayer(
       } else {
         depth--;
         if (depth === 0) {
-          const closeTagEnd = nextCloseIdx + 4; // </g>
-
           const children = svg.slice(afterOpeningTag, nextCloseIdx);
           const wrappedChildren = `<g transform="${transform.replace(/"/g, "&quot;")}">${children}</g>`;
 

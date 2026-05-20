@@ -1,8 +1,8 @@
 export function buildRevisionPlannerPrompt(params: {
-  classification: any;
-  layout: any;
+  classification: unknown;
+  layout: unknown;
   svgSource?: string;
-  issues: any[];
+  issues: unknown[];
   currentIteration: number;
 }): { system: string; user: string } {
   const system = `You are a geometry and style correction planner. Analyze evaluation issues and produce a structured revision plan. Return JSON only.`;

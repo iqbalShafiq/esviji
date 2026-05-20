@@ -1,7 +1,7 @@
 export function buildSvgCoderPrompt(params: {
-  brief: any;
-  styleSystem: any;
-  layout: any;
+  brief: unknown;
+  styleSystem: unknown;
+  layout: unknown;
   revisionInstruction?: string;
   previousSvg?: string;
   previousErrorContext?: string;

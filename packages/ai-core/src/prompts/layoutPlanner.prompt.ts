@@ -1,8 +1,8 @@
 export function buildLayoutPlannerPrompt(params: {
-  brief: any;
-  styleSystem: any;
-  referenceAnalysis?: any;
-  classification: any;
+  brief: unknown;
+  styleSystem: unknown;
+  referenceAnalysis?: unknown;
+  classification: unknown;
   width: number;
   height: number;
 }): { system: string; user: string } {

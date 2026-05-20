@@ -1,4 +1,5 @@
 import { generateDebugOverlay, renderSvg } from '@svg-builder/svg-core';
+import type { LayoutBlueprint } from '@svg-builder/shared';
 import { StorageService } from './StorageService.js';
 import { logger } from '../utils/logger.js';
 
@@ -6,7 +7,7 @@ export class DebugOverlayService {
   constructor(private storageService: StorageService) {}
 
   async generate(
-    layout: any,
+    layout: LayoutBlueprint,
     svg: string,
     assetId: string,
     iteration: number

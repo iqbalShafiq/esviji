@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ASSET_TYPES } from "@svg-builder/shared";
 import type { BuildSvgPackRequest } from "@svg-builder/shared";
 import { buildSvgPack } from "../../lib/api.js";
 

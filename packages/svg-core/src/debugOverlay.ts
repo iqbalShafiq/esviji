@@ -1,4 +1,16 @@
-export function generateDebugOverlay(layoutBlueprint: any, svg: string): string {
+type DebugOverlayLayout = {
+  layers?: Array<{
+    id?: unknown;
+    bounds?: {
+      x?: unknown;
+      y?: unknown;
+      w?: unknown;
+      h?: unknown;
+    };
+  }>;
+};
+
+export function generateDebugOverlay(layoutBlueprint: DebugOverlayLayout, svg: string): string {
   if (!layoutBlueprint || !layoutBlueprint.layers || !Array.isArray(layoutBlueprint.layers)) {
     throw new Error("layoutBlueprint must have a layers array");
   }

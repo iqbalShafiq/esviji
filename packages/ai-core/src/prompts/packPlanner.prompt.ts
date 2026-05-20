@@ -1,6 +1,6 @@
 export function buildPackPlannerPrompt(params: {
   prompt: string;
-  classification: any;
+  classification: unknown;
   items?: string[];
   quantity: number;
   style?: string;

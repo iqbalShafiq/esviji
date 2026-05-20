@@ -13,7 +13,46 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
-type RawAsset = Record<string, any>;
+type RawIteration = {
+  iterationNumber?: number;
+  iteration?: number;
+  svgDraftPath?: string;
+  pngPreviewPath?: string;
+  scores?: Record<string, number>;
+  issues?: AssetResponse["evaluation"] extends infer Evaluation
+    ? Evaluation extends { issues?: infer Issues }
+      ? Issues
+      : never
+    : never;
+  actionTaken?: AssetResponse["iterations"][number]["revisionPlan"];
+};
+
+type RawAsset = {
+  id?: string;
+  assetId?: string;
+  prompt?: string;
+  assetType?: string;
+  mode?: string;
+  style?: string;
+  output?: { width?: number; height?: number; formats?: string[] };
+  width?: number;
+  height?: number;
+  status?: string;
+  currentStage?: string;
+  pipelineStages?: AssetResponse["pipelineStages"];
+  classification?: AssetResponse["classification"];
+  brief?: AssetResponse["brief"];
+  styleSystem?: AssetResponse["styleSystem"];
+  layoutBlueprint?: AssetResponse["layoutBlueprint"];
+  finalSvg?: string;
+  finalSvgPath?: string;
+  finalPngPath?: string;
+  iterations?: RawIteration[];
+  evaluation?: AssetResponse["evaluation"];
+  qualityGates?: AssetResponse["qualityGates"];
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:3001",
@@ -43,6 +82,8 @@ export function subscribeJobStream(
   handlers: {
     onJob: (job: JobResponse) => void;
     onFlow?: (flow: { stage: string; message: string; at: string; progress?: number }) => void;
+    onModelToken?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
+    onReasoning?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
     onError?: (error: string) => void;
   }
 ): () => void {
@@ -76,6 +117,22 @@ export function subscribeJobStream(
       handlers.onFlow?.(data);
     } catch {
       handlers.onError?.("Failed to parse flow event");
+    }
+  });
+
+  source.addEventListener("model", (event) => {
+    try {
+      handlers.onModelToken?.(JSON.parse((event as MessageEvent).data));
+    } catch {
+      handlers.onError?.("Failed to parse model stream event");
+    }
+  });
+
+  source.addEventListener("reasoning", (event) => {
+    try {
+      handlers.onReasoning?.(JSON.parse((event as MessageEvent).data));
+    } catch {
+      handlers.onError?.("Failed to parse reasoning stream event");
     }
   });
 
@@ -173,7 +230,7 @@ function normalizeAsset(raw: RawAsset, finalSvg?: string): AssetResponse {
       : "pending";
 
   const iterations = Array.isArray(raw.iterations)
-    ? raw.iterations.map((it: any, index: number) => ({
+    ? raw.iterations.map((it, index) => ({
         iteration: it.iterationNumber ?? it.iteration ?? index + 1,
         svg: it.svgDraftPath,
         pngUrl: it.pngPreviewPath,

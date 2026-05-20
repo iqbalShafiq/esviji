@@ -44,23 +44,11 @@ const BLOCKED_ATTRIBUTES_REGEX = /^on/i;
 const EXTERNAL_URL_REGEX = /^(https?:|data:|javascript:|file:|ftp:)/i;
 const HREF_ATTRIBUTES = new Set(["href", "xlink:href", "src"]);
 
-function extractTagName(tag: string): string {
-  const match = tag.match(/^<\/?([a-zA-Z][a-zA-Z0-9-]*)/);
-  return match ? match[1].toLowerCase() : "";
-}
-
-function isSelfClosing(tagName: string): boolean {
-  // SVG does not have HTML void elements; all SVG elements can have children.
-  // However, some elements like stop, feTurbulence, etc. typically don't have children.
-  // For validation purposes we treat all as potentially having closing tags.
-  return false;
-}
-
 function sanitizeAttributes(
   tag: string,
   tagName: string,
   errors: string[],
-  warnings: string[]
+  _warnings: string[]
 ): string {
   // Match all attributes: name="value" or name='value' or name=value or boolean attributes
   const attrRegex =
@@ -95,7 +83,7 @@ function sanitizeAttributes(
     }
   }
 
-  if (tag.trim().endsWith("/>") || tag.trim().endsWith("/>")) {
+  if (tag.trim().endsWith("/>")) {
     sanitizedTag += " />";
   } else {
     sanitizedTag += ">";
@@ -168,7 +156,6 @@ export function validateSvg(svg: string): SvgValidationResult {
   while ((match = tagRegex.exec(content)) !== null) {
     const isClosing = match[1] === "/";
     const tagName = match[2].toLowerCase();
-    const attrPart = match[3];
     const fullMatch = match[0];
     const matchIndex = match.index;
 

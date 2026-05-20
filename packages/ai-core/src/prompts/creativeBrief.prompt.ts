@@ -1,10 +1,10 @@
 export function buildCreativeBriefPrompt(params: {
   prompt: string;
-  classification: any;
+  classification: unknown;
   style?: string;
   width: number;
   height: number;
-  referenceAnalysis?: any;
+  referenceAnalysis?: unknown;
 }): { system: string; user: string } {
   const system = `You are an expert art director for SVG asset generation. Create a detailed creative brief based on the user's request and classification. Return JSON only.`;
 

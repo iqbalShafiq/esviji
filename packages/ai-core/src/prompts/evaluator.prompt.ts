@@ -1,12 +1,13 @@
 export function buildEvaluatorPrompt(params: {
-  classification: any;
-  brief: any;
-  styleSystem: any;
-  layout: any;
-  referenceAnalysis?: any;
+  classification: unknown;
+  brief: unknown;
+  styleSystem: unknown;
+  layout: unknown;
+  referenceAnalysis?: unknown;
   renderedPreviewBase64?: string;
   svgSource?: string;
   validationSummary?: { valid: boolean; errors: string[]; warnings: string[] };
+  previousEvaluationContext?: unknown;
 }): { system: string; user: string } {
   const system = `You are a strict visual QA evaluator and SVG production reviewer. Evaluate an SVG asset against its brief, style system, layout plan, technical validity, and visual craft. Return JSON only with numeric scores and concrete fixes.`;
 
@@ -20,6 +21,7 @@ ${params.referenceAnalysis ? `Reference analysis: ${JSON.stringify(params.refere
 ${params.renderedPreviewBase64 ? `Rendered preview PNG (base64): ${params.renderedPreviewBase64}` : ""}
 ${params.svgSource ? `SVG source:\n${params.svgSource}` : ""}
 ${params.validationSummary ? `SVG validation summary: ${JSON.stringify(params.validationSummary, null, 2)}` : ""}
+${params.previousEvaluationContext ? `Previous evaluation context: ${JSON.stringify(params.previousEvaluationContext, null, 2)}\nUse this to determine whether earlier fixes are now resolved, which issues remain, and whether the current SVG regressed on prior scores.` : ""}
 
 Return a JSON object matching EvaluationResult with these fields:
 - scores: object with numeric scores (0-100). Always include overall, styleAdherence, layoutAccuracy, readability, technicalQuality, and technicalValidity.

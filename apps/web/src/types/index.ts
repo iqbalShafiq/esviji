@@ -59,6 +59,13 @@ export interface JobResponse {
   latestIteration?: number;
   stageStreams?: Record<string, string>;
   stageReasoningStreams?: Record<string, string>;
+  streamEvents?: Array<{
+    sequence: number;
+    type: "model" | "reasoning";
+    stage: string;
+    content: string;
+    at: string;
+  }>;
   logs: Array<{ stage: string; message: string; at: string; progress?: number }>;
   error?: string;
 }

@@ -18,6 +18,7 @@ export class AssetTypeEvaluatorService {
       onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
       svgSource?: string;
       validationSummary?: { valid: boolean; errors: string[]; warnings: string[] };
+      previousEvaluationContext?: unknown;
     }
   ): Promise<EvaluationResult> {
     let renderedPreviewBase64: string | undefined;
@@ -37,6 +38,7 @@ export class AssetTypeEvaluatorService {
       renderedPreviewBase64,
       svgSource: options?.svgSource,
       validationSummary: options?.validationSummary,
+      previousEvaluationContext: options?.previousEvaluationContext,
     });
 
     const result = await generateStructuredOutput(

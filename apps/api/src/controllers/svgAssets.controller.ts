@@ -4,10 +4,6 @@ import {
   IterateSvgAssetRequestSchema,
   RenderSvgRequestSchema,
   OptimizeSvgRequestSchema,
-  type BuildSvgAssetRequest,
-  type IterateSvgAssetRequest,
-  type RenderSvgRequest,
-  type OptimizeSvgRequest,
 } from '@svg-builder/shared';
 import { prisma } from '../db/prisma.js';
 import type { SvgBuildOrchestrator } from '../orchestrators/SvgBuildOrchestrator.js';
@@ -116,6 +112,7 @@ export class SvgAssetsController {
     });
 
     let sentLogs = 0;
+    let sentStreamSequence: number | undefined;
 
     const write = async () => {
       const job = await this.jobService.get(jobId);
@@ -123,6 +120,16 @@ export class SvgAssetsController {
         reply.raw.write(`event: error\ndata: ${JSON.stringify({ message: 'Job not found' })}\n\n`);
         reply.raw.end();
         return true;
+      }
+
+      if (sentStreamSequence === undefined) {
+        sentStreamSequence = job.streamEvents?.[job.streamEvents.length - 1]?.sequence ?? 0;
+      } else {
+        const events = await this.jobService.getStreamEventsAfter(jobId, sentStreamSequence);
+        for (const event of events) {
+          reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+          sentStreamSequence = event.sequence;
+        }
       }
 
       reply.raw.write(`event: job\ndata: ${JSON.stringify(job)}\n\n`);
@@ -148,7 +155,7 @@ export class SvgAssetsController {
     const timer = setInterval(async () => {
       const finished = await write();
       if (finished) clearInterval(timer);
-    }, 1000);
+    }, 100);
 
     request.raw.on('close', () => {
       clearInterval(timer);

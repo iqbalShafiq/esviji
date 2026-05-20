@@ -28,8 +28,14 @@ export function PipelineFlowLogs({
       list.push(log);
       map.set(log.stage, list);
     }
+    for (const stage of Object.keys(stageStreams ?? {})) {
+      if (!map.has(stage)) map.set(stage, []);
+    }
+    for (const stage of Object.keys(stageReasoningStreams ?? {})) {
+      if (!map.has(stage)) map.set(stage, []);
+    }
     return [...map.entries()].map(([stage, entries]) => ({ stage, entries }));
-  }, [logs]);
+  }, [logs, stageStreams, stageReasoningStreams]);
 
   const latestStage = grouped[grouped.length - 1]?.stage;
   const [expandedStage, setExpandedStage] = useState<string | undefined>(latestStage);
@@ -186,6 +192,11 @@ export function PipelineFlowLogs({
                       </div>
                     </div>
                   ))}
+                  {group.entries.length === 0 && (
+                    <div className="text-[11px] font-mono" style={{ color: "var(--muted)" }}>
+                      Streaming output is available for this stage.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
