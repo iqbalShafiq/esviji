@@ -47,6 +47,10 @@ export class SvgPackBuildOrchestrator {
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
       onReasoning?: (stage: import('@svg-builder/shared').PipelineStage, message: string) => void;
+      onToolEvent?: (
+        stage: import('@svg-builder/shared').PipelineStage,
+        event: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string }
+      ) => void;
     }
   ): Promise<AssetPack> {
     // Step 1: Create AssetPack record in DB with status "processing"
@@ -165,6 +169,11 @@ export class SvgPackBuildOrchestrator {
           },
           onLlmToken: (stage, token) => options?.onLlmToken?.(stage, token),
           onReasoning: (stage, message) => options?.onReasoning?.(stage, `[${item.name}] ${message}`),
+          onToolEvent: (stage, event) =>
+            options?.onToolEvent?.(stage, {
+              ...event,
+              message: `[${item.name}] ${event.message}`,
+            }),
         });
 
         logger.info({ packId: pack.id, assetId: asset.id }, 'Pack asset built');

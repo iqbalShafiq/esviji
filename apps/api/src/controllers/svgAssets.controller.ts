@@ -57,6 +57,9 @@ export class SvgAssetsController {
             onReasoning: (stage, message) => {
               void this.jobService.appendStageReasoning(jobId, stage, message);
             },
+            onToolEvent: (stage, event) => {
+              void this.jobService.appendToolEvent(jobId, stage, event);
+            },
             onIterationRendered: (iteration, previewUrl) => {
               void this.jobService.setLatestPreview(jobId, previewUrl, iteration);
             },

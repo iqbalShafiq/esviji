@@ -5,7 +5,7 @@ export function buildRevisionPlannerPrompt(params: {
   issues: unknown[];
   currentIteration: number;
 }): { system: string; user: string } {
-  const system = `You are a geometry and style correction planner. Analyze evaluation issues and produce a structured revision plan. Return JSON only.`;
+  const system = `You are a geometry and style correction planner. Analyze evaluation issues and produce a structured revision plan. Return strict JSON only.`;
 
   const user = `Create a revision plan based on the evaluation issues.
 
@@ -33,6 +33,8 @@ Planning rules:
 - Use full_regenerate when the SVG is visually generic, sparse, technically invalid, or structurally inconsistent with the layout.
 - Make the plan directly executable: target exact layer IDs from the current SVG, keep transform values as valid SVG transform strings when using layer_transform, and put concrete regeneration instructions in notes.
 - If a layout change is needed, include only the layout fields that must change in updatedLayout and explain why in notes.
+- Keep notes concise. Do not include raw SVG, markdown, code fences, or unescaped quote characters inside notes.
+- Output one valid JSON object only. Every string must use JSON-safe escaping.
 
 Return JSON only, no markdown.`;
 

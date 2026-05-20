@@ -6,10 +6,12 @@ export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
 export type JobStreamEvent = {
   sequence: number;
-  type: 'model' | 'reasoning' | 'clear';
+  type: 'model' | 'reasoning' | 'tool' | 'clear';
   stage: PipelineStage;
   content: string;
   at: string;
+  toolName?: string;
+  toolStatus?: 'requested' | 'running' | 'completed' | 'failed';
 };
 
 export interface JobState {
@@ -159,6 +161,27 @@ export class JobService {
     });
   }
 
+  async appendToolEvent(
+    jobId: string,
+    stage: PipelineStage,
+    input: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message?: string }
+  ): Promise<void> {
+    await this.mutate(jobId, (job) => ({
+      status: 'running',
+      currentStage: stage,
+      streamEvents: this.appendStreamEvent(
+        job,
+        'tool',
+        stage,
+        input.message ?? `Tool ${input.status}: ${input.name}`,
+        {
+          toolName: input.name,
+          toolStatus: input.status,
+        }
+      ),
+    }));
+  }
+
   async getStreamEventsAfter(jobId: string, sequence: number): Promise<JobStreamEvent[]> {
     const job = await this.get(jobId);
     if (!job) return [];
@@ -191,7 +214,8 @@ export class JobService {
     job: JobState,
     type: JobStreamEvent['type'],
     stage: PipelineStage,
-    content: string
+    content: string,
+    metadata?: Pick<JobStreamEvent, 'toolName' | 'toolStatus'>
   ): JobStreamEvent[] {
     const events = job.streamEvents ?? [];
     const lastSequence = events[events.length - 1]?.sequence ?? 0;
@@ -203,6 +227,7 @@ export class JobService {
         stage,
         content,
         at: new Date().toISOString(),
+        ...metadata,
       },
     ].slice(-1000);
   }

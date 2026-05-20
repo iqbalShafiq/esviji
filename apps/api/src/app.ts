@@ -11,6 +11,7 @@ console.log('[DEBUG] Loading .env from:', envPath);
 const dotenvResult = dotenv.config({ path: envPath });
 console.log('[DEBUG] dotenv error:', dotenvResult.error);
 console.log('[DEBUG] DATABASE_URL exists:', !!process.env.DATABASE_URL);
+configureLangSmithEnv();
 
 import { OpenAiProvider } from '@svg-builder/ai-core';
 
@@ -41,6 +42,21 @@ import { registerSvgPackRoutes } from './routes/svgPacks.routes.js';
 import { SvgRepairAgentService } from './agents/SvgRepairAgentService.js';
 import { SvgGenerationWorkflowService } from './agents/SvgGenerationWorkflowService.js';
 import { prisma } from './db/prisma.js';
+
+function configureLangSmithEnv(): void {
+  if (!process.env.LANGSMITH_TRACING && process.env.LANGSMITH_ENABLED) {
+    process.env.LANGSMITH_TRACING = process.env.LANGSMITH_ENABLED;
+  }
+  if (!process.env.LANGCHAIN_TRACING_V2 && process.env.LANGSMITH_TRACING) {
+    process.env.LANGCHAIN_TRACING_V2 = process.env.LANGSMITH_TRACING;
+  }
+  if (!process.env.LANGCHAIN_API_KEY && process.env.LANGSMITH_API_KEY) {
+    process.env.LANGCHAIN_API_KEY = process.env.LANGSMITH_API_KEY;
+  }
+  if (!process.env.LANGCHAIN_PROJECT && process.env.LANGSMITH_PROJECT) {
+    process.env.LANGCHAIN_PROJECT = process.env.LANGSMITH_PROJECT;
+  }
+}
 
 export async function buildApp() {
   const app = Fastify({

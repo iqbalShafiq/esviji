@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type FlowLog = { stage: string; message: string; at: string; progress?: number };
+type StreamEvent = {
+  sequence: number;
+  type: "model" | "reasoning" | "tool" | "clear";
+  stage: string;
+  content: string;
+  at: string;
+  toolName?: string;
+  toolStatus?: "requested" | "running" | "completed" | "failed";
+};
 
 interface PipelineFlowLogsProps {
   logs: FlowLog[];
@@ -8,6 +17,7 @@ interface PipelineFlowLogsProps {
   failed?: boolean;
   stageStreams?: Record<string, string>;
   stageReasoningStreams?: Record<string, string>;
+  streamEvents?: StreamEvent[];
   error?: string;
 }
 
@@ -17,6 +27,7 @@ export function PipelineFlowLogs({
   failed,
   stageStreams,
   stageReasoningStreams,
+  streamEvents,
   error,
 }: PipelineFlowLogsProps) {
   const stageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -34,8 +45,11 @@ export function PipelineFlowLogs({
     for (const stage of Object.keys(stageReasoningStreams ?? {})) {
       if (!map.has(stage)) map.set(stage, []);
     }
+    for (const event of streamEvents ?? []) {
+      if (event.type === "tool" && !map.has(event.stage)) map.set(event.stage, []);
+    }
     return [...map.entries()].map(([stage, entries]) => ({ stage, entries }));
-  }, [logs, stageStreams, stageReasoningStreams]);
+  }, [logs, stageStreams, stageReasoningStreams, streamEvents]);
 
   const latestStage = grouped[grouped.length - 1]?.stage;
   const [expandedStage, setExpandedStage] = useState<string | undefined>(latestStage);
@@ -72,6 +86,9 @@ export function PipelineFlowLogs({
       )}
       <div className="max-h-[280px] overflow-y-auto">
         {grouped.map((group) => {
+          const toolEvents = dedupeToolEvents(
+            (streamEvents ?? []).filter((event) => event.type === "tool" && event.stage === group.stage)
+          );
           const expanded = expandedStage === group.stage;
           const isActive = currentStage === group.stage;
           const groupHasRetry = group.entries.some((entry) => isRetryMessage(entry.message));
@@ -163,6 +180,38 @@ export function PipelineFlowLogs({
                       {stageStreams[group.stage]}
                     </div>
                   )}
+                  {toolEvents.length > 0 && (
+                    <div
+                      className="text-[11px] font-mono border p-2"
+                      style={{ borderColor: "var(--line)", background: "var(--bg)", color: "var(--ink)" }}
+                    >
+                      <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--muted)" }}>
+                        Tool calls
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {toolEvents.map((event) => (
+                          <div key={event.sequence} className="flex items-start justify-between gap-2">
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span style={{ color: toolStatusColor(event.toolStatus) }}>
+                                {toolStatusIcon(event.toolStatus)}
+                              </span>
+                              <span className="truncate">{event.toolName ?? event.content}</span>
+                            </span>
+                            <span
+                              className="shrink-0 px-1.5 py-0.5 border uppercase text-[9px]"
+                              style={{
+                                borderColor: toolStatusColor(event.toolStatus),
+                                color: toolStatusColor(event.toolStatus),
+                                background: toolStatusBackground(event.toolStatus),
+                              }}
+                            >
+                              {event.toolStatus ?? "tool"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {group.entries.map((entry, idx) => (
                     <div
                       key={`${entry.at}-${idx}`}
@@ -214,4 +263,59 @@ function isRetryMessage(message: string): boolean {
 function isErrorMessage(message: string): boolean {
   if (isRetryMessage(message)) return false;
   return /failed|error|invalid|validation failed/i.test(message);
+}
+
+function dedupeToolEvents(events: StreamEvent[]): StreamEvent[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    const key = `${event.toolName ?? event.content}:${event.toolStatus ?? "tool"}:${event.sequence}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function toolStatusColor(status?: StreamEvent["toolStatus"]): string {
+  switch (status) {
+    case "completed":
+      return "var(--green)";
+    case "failed":
+      return "var(--red)";
+    case "running":
+      return "var(--blueprint)";
+    case "requested":
+      return "var(--amber)";
+    default:
+      return "var(--muted)";
+  }
+}
+
+function toolStatusBackground(status?: StreamEvent["toolStatus"]): string {
+  switch (status) {
+    case "completed":
+      return "rgba(47, 158, 68, 0.08)";
+    case "failed":
+      return "rgba(214, 69, 69, 0.08)";
+    case "running":
+      return "rgba(20, 87, 217, 0.08)";
+    case "requested":
+      return "rgba(216, 148, 0, 0.08)";
+    default:
+      return "transparent";
+  }
+}
+
+function toolStatusIcon(status?: StreamEvent["toolStatus"]): string {
+  switch (status) {
+    case "completed":
+      return "✓";
+    case "failed":
+      return "x";
+    case "running":
+      return "o";
+    case "requested":
+      return "…";
+    default:
+      return "-";
+  }
 }

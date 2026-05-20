@@ -4,7 +4,16 @@ import { QUALITY_THRESHOLDS } from '@svg-builder/shared';
 import { readFile } from 'fs/promises';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { createLangChainChatModel, type LangChainModelConfig } from '../agents/langChainModelFactory.js';
-import OpenAI from 'openai';
+
+type ChatMessageContent =
+  | string
+  | Array<string | { type?: string; text?: string; reasoning?: string; [key: string]: unknown }>;
+
+type ChatMessageChunk = {
+  text?: string;
+  content?: ChatMessageContent;
+  contentBlocks?: Array<Record<string, unknown>>;
+};
 
 export class AssetTypeEvaluatorService {
   constructor(private llmProvider: LlmProvider, private langChainModelConfig?: LangChainModelConfig) {}
@@ -130,7 +139,6 @@ export class AssetTypeEvaluatorService {
     
     const enhancedSystem = `${system}\n\nYou must return a JSON object that strictly follows this schema:\n${zodSchemaToPrompt(EvaluationResultSchema)}`;
 
-    // If streaming is requested, use OpenAI SDK directly for streaming support
     if (options?.onToken || options?.onReasoning) {
       return this.evaluateWithStreaming(enhancedSystem, user, renderedPreviewDataUrl, maxRetries, errors, options);
     }
@@ -197,74 +205,31 @@ export class AssetTypeEvaluatorService {
               .join('\n')}\n\nRetry instructions:\n- Return output that satisfies the requested JSON schema exactly.`
           : '';
 
-        const client = new OpenAI({
-          apiKey: this.langChainModelConfig!.apiKey,
-          baseURL: this.langChainModelConfig!.baseUrl,
-        });
-
-        // If reasoning streaming is requested, use Responses API
-        if (options?.onReasoning) {
-          const stream = await client.responses.create({
-            model: this.langChainModelConfig!.model,
-            input: [
-              { role: 'system', content: system },
-              { 
-                role: 'user', 
-                content: [
-                  { type: 'input_text', text: `${user}${retryText}\n\nReturn JSON only, no markdown.` },
-                  { type: 'input_image', image_url: renderedPreviewDataUrl, detail: 'auto' },
-                ]
-              },
-            ],
-            temperature: 0.2,
-            reasoning: { effort: 'medium', summary: 'auto' },
-            stream: true,
-          });
-
-          let full = '';
-          for await (const event of stream) {
-            if (event.type === 'response.output_text.delta') {
-              const delta = (event as any).delta;
-              if (delta) {
-                full += delta;
-                options.onToken?.(delta);
-              }
-            }
-            if (event.type === 'response.reasoning_summary_text.delta') {
-              const delta = (event as any).delta;
-              if (delta) {
-                options.onReasoning?.(delta);
-              }
-            }
-          }
-
-          return EvaluationResultSchema.parse(JSON.parse(repairJson(full)));
-        }
-
-        // Token-only streaming: use Chat Completions API
-        const stream = await client.chat.completions.create({
-          model: this.langChainModelConfig!.model,
-          messages: [
-            { role: 'system', content: system },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: `${user}${retryText}\n\nReturn JSON only, no markdown.` },
-                { type: 'image_url', image_url: { url: renderedPreviewDataUrl } },
-              ],
-            },
-          ],
+        const model = createLangChainChatModel(this.langChainModelConfig!, {
           temperature: 0.2,
-          response_format: { type: 'json_object' },
-          stream: true,
+          maxRetries: 0,
+          useResponsesApi: false,
+          reasoningEffort: 'medium',
         });
+        const content = [
+          { type: 'text', text: `${user}${retryText}\n\nReturn JSON only, no markdown.` },
+          { type: 'image_url', image_url: { url: renderedPreviewDataUrl } },
+        ];
+        const stream = await model.stream([
+          new SystemMessage(system),
+          new HumanMessage({ content: content as never }),
+        ]);
 
         let full = '';
         for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content;
-          if (content) {
-            full += content;
-            options?.onToken?.(content);
+          const text = extractText(chunk as ChatMessageChunk);
+          const reasoning = extractReasoning(chunk as ChatMessageChunk);
+          if (reasoning) {
+            options?.onReasoning?.(reasoning);
+          }
+          if (text) {
+            full += text;
+            options?.onToken?.(text);
           }
         }
 
@@ -282,4 +247,47 @@ export class AssetTypeEvaluatorService {
       `Failed to generate multimodal evaluation after ${maxRetries + 1} attempt(s): ${errors.at(-1)?.message}`
     );
   }
+}
+
+function extractText(message: ChatMessageChunk): string {
+  if (typeof message.text === 'string' && message.text.length > 0) {
+    return message.text;
+  }
+
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part.type === 'text' && typeof part.text === 'string') return part.text;
+        return '';
+      })
+      .join('');
+  }
+
+  if (Array.isArray(message.contentBlocks)) {
+    return message.contentBlocks
+      .map((block) => (block.type === 'text' && typeof block.text === 'string' ? block.text : ''))
+      .join('');
+  }
+
+  return '';
+}
+
+function extractReasoning(message: ChatMessageChunk): string {
+  if (!Array.isArray(message.contentBlocks)) {
+    return '';
+  }
+
+  return message.contentBlocks
+    .map((block) => {
+      if (block.type !== 'reasoning') return '';
+      if (typeof block.reasoning === 'string') return block.reasoning;
+      if (typeof block.text === 'string') return block.text;
+      return '';
+    })
+    .join('');
 }

@@ -57,6 +57,9 @@ export default function PackBuilderPage() {
       onReasoning: ({ stage, content }) => {
         setJob((current) => appendJobStream(current, "stageReasoningStreams", stage, content));
       },
+      onTool: (event) => {
+        setJob((current) => appendJobToolEvent(current, event));
+      },
       onClearStream: ({ stage }) => {
         setJob((current) => clearJobStream(current, stage));
       },
@@ -137,6 +140,7 @@ export default function PackBuilderPage() {
                   failed={job.status === "failed"}
                   stageStreams={job.stageStreams}
                   stageReasoningStreams={job.stageReasoningStreams}
+                  streamEvents={job.streamEvents}
                   error={job.error}
                 />
               )}
@@ -181,11 +185,27 @@ function appendJobStream(
   };
 }
 
+function appendJobToolEvent(
+  job: JobResponse | undefined,
+  event: NonNullable<JobResponse["streamEvents"]>[number]
+): JobResponse | undefined {
+  if (!job) return job;
+  const streamEvents = job.streamEvents ?? [];
+  if (streamEvents.some((item) => item.sequence === event.sequence)) {
+    return job;
+  }
+  return {
+    ...job,
+    streamEvents: [...streamEvents, event],
+  };
+}
+
 function hasPipelineData(job: JobResponse | undefined): job is JobResponse {
   if (!job) return false;
   return (
     job.logs.length > 0 ||
     Object.keys(job.stageStreams ?? {}).length > 0 ||
-    Object.keys(job.stageReasoningStreams ?? {}).length > 0
+    Object.keys(job.stageReasoningStreams ?? {}).length > 0 ||
+    (job.streamEvents ?? []).some((event) => event.type === "tool")
   );
 }

@@ -41,6 +41,9 @@ export class SvgPacksController {
             onReasoning: (stage, message) => {
               void this.jobService.appendStageReasoning(jobId, stage, message);
             },
+            onToolEvent: (stage, event) => {
+              void this.jobService.appendToolEvent(jobId, stage, event);
+            },
           });
           await this.jobService.attachPack(jobId, pack.id);
           await this.jobService.complete(jobId);

@@ -54,3 +54,28 @@ test('JobService preserves stage logs while model and reasoning updates stream c
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('JobService records tool stream events with lifecycle metadata', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'svg-job-service-'));
+  try {
+    const service = new JobService(dir);
+    await service.create({ jobId: 'job_tools' });
+
+    await service.appendToolEvent('job_tools', 'svg', {
+      name: 'validate_svg',
+      status: 'running',
+      message: 'Calling repair tool: validate_svg',
+    });
+
+    const events = await service.getStreamEventsAfter('job_tools', 0);
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, 'tool');
+    assert.equal(events[0].stage, 'svg');
+    assert.equal(events[0].toolName, 'validate_svg');
+    assert.equal(events[0].toolStatus, 'running');
+    assert.equal(events[0].content, 'Calling repair tool: validate_svg');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

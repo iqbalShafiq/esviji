@@ -85,6 +85,15 @@ export function subscribeJobStream(
     onFlow?: (flow: { stage: string; message: string; at: string; progress?: number }) => void;
     onModelToken?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
     onReasoning?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
+    onTool?: (event: {
+      stage: string;
+      type: "tool";
+      content: string;
+      at: string;
+      sequence: number;
+      toolName?: string;
+      toolStatus?: "requested" | "running" | "completed" | "failed";
+    }) => void;
     onClearStream?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
     onError?: (error: string) => void;
   }
@@ -130,21 +139,29 @@ export function subscribeJobStream(
     }
   });
 
-    source.addEventListener("reasoning", (event) => {
-      try {
-        handlers.onReasoning?.(JSON.parse((event as MessageEvent).data));
-      } catch {
-        handlers.onError?.("Failed to parse reasoning stream event");
-      }
-    });
+  source.addEventListener("reasoning", (event) => {
+    try {
+      handlers.onReasoning?.(JSON.parse((event as MessageEvent).data));
+    } catch {
+      handlers.onError?.("Failed to parse reasoning stream event");
+    }
+  });
 
-    source.addEventListener("clear", (event) => {
-      try {
-        handlers.onClearStream?.(JSON.parse((event as MessageEvent).data));
-      } catch {
-        handlers.onError?.("Failed to parse stream clear event");
-      }
-    });
+  source.addEventListener("tool", (event) => {
+    try {
+      handlers.onTool?.(JSON.parse((event as MessageEvent).data));
+    } catch {
+      handlers.onError?.("Failed to parse tool stream event");
+    }
+  });
+
+  source.addEventListener("clear", (event) => {
+    try {
+      handlers.onClearStream?.(JSON.parse((event as MessageEvent).data));
+    } catch {
+      handlers.onError?.("Failed to parse stream clear event");
+    }
+  });
 
   source.onerror = () => {
     handlers.onError?.("SSE connection error");

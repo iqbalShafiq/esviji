@@ -5,7 +5,7 @@ import { repairJson } from "./jsonRepair.js";
 
 const DEFAULT_MAX_RETRIES = 3;
 
-export function zodSchemaToPrompt(schema: z.ZodType<any, any, any>): string {
+export function zodSchemaToPrompt(schema: z.ZodType<unknown, z.ZodTypeDef, unknown>): string {
   const jsonSchema = zodToJsonSchema(schema, { name: "response", $refStrategy: "none" });
   const cleanSchema = jsonSchema.definitions?.response ?? jsonSchema;
   return JSON.stringify(cleanSchema, null, 2);
@@ -35,7 +35,7 @@ export async function generateStructuredOutput<T>(
   provider: LlmProvider,
   systemPrompt: string,
   userPrompt: string,
-  schema: z.ZodType<T, any, any>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   options?: {
     maxRetries?: number;
     onToken?: (token: string) => void;

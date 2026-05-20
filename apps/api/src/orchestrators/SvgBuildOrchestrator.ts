@@ -8,6 +8,7 @@ import type {
   RevisionPlan,
   BuildSvgAssetRequest,
   IterateSvgAssetRequest,
+  PipelineStage,
 } from '@svg-builder/shared';
 import type { Asset } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -31,6 +32,7 @@ import { StorageService } from '../services/StorageService.js';
 import { DebugOverlayService } from '../services/DebugOverlayService.js';
 import { IssueTracker } from '../services/IssueTracker.js';
 import { SvgGenerationWorkflowService } from '../agents/SvgGenerationWorkflowService.js';
+import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 
 export class SvgBuildOrchestrator {
   constructor(
@@ -61,6 +63,10 @@ export class SvgBuildOrchestrator {
       onIterationRendered?: (iteration: number, previewUrl: string) => void;
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
       onReasoning?: (stage: import('@svg-builder/shared').PipelineStage, message: string) => void;
+      onToolEvent?: (
+        stage: import('@svg-builder/shared').PipelineStage,
+        event: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string }
+      ) => void;
     }
   ): Promise<Asset> {
     const asset = await prisma.asset.create({
@@ -98,6 +104,10 @@ export class SvgBuildOrchestrator {
           this.retryProgressForStage(stage)
         );
       };
+
+      if (process.env.USE_LANGGRAPH_PIPELINE !== 'false') {
+        return await this.runBuildGraph(asset, request, options, reportRetry);
+      }
 
       options?.onStage?.('classify', 'Classifying asset type', 10);
       // Step 2: Classify asset type
@@ -237,6 +247,10 @@ export class SvgBuildOrchestrator {
           onToken: (token) => options?.onLlmToken?.('svg', token),
           onReasoning: (token) => options?.onReasoning?.('svg', token),
           onToolEvent: (message) => {
+            const toolEvent = parseRepairToolEvent(message);
+            if (toolEvent) {
+              options?.onToolEvent?.('svg', toolEvent);
+            }
             options?.onStage?.('svg', message, 52);
           },
           onRetry: (attempt, maxRetries, error) =>
@@ -589,6 +603,475 @@ export class SvgBuildOrchestrator {
     }
   }
 
+  private async runBuildGraph(
+    asset: Asset,
+    request: BuildSvgAssetRequest,
+    options: {
+      sharedStyleSystem?: StyleSystem;
+      packId?: string;
+      name?: string;
+      onStage?: (stage: PipelineStage, message: string, progress: number) => void;
+      onIterationRendered?: (iteration: number, previewUrl: string) => void;
+      onLlmToken?: (stage: PipelineStage, token: string) => void;
+      onReasoning?: (stage: PipelineStage, message: string) => void;
+      onToolEvent?: (
+        stage: PipelineStage,
+        event: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string }
+      ) => void;
+    } | undefined,
+    reportRetry: (stage: PipelineStage, attempt: number, maxRetries: number, error: Error) => void
+  ): Promise<Asset> {
+    const issueTracker = new IssueTracker();
+    const maxIterations = request.maxIterations ?? 15;
+
+    type ValidationSummary = { valid: boolean; errors: string[]; warnings: string[] };
+    type BestIteration = {
+      iteration: number;
+      svg: string;
+      scores: EvaluationResult['scores'];
+      issues: EvaluationIssue[];
+      pngUrl: string;
+    };
+
+    const BuildState = Annotation.Root({
+      classification: Annotation<AssetTypeClassification | undefined>(),
+      referenceAnalysis: Annotation<unknown | undefined>(),
+      brief: Annotation<CreativeBrief | undefined>(),
+      styleSystem: Annotation<StyleSystem | undefined>(),
+      layout: Annotation<LayoutBlueprint | undefined>(),
+      currentLayout: Annotation<LayoutBlueprint | undefined>(),
+      currentSvg: Annotation<string>(),
+      evaluation: Annotation<EvaluationResult | undefined>(),
+      lastRevisionPlan: Annotation<RevisionPlan | undefined>(),
+      lastValidationSummary: Annotation<ValidationSummary | undefined>(),
+      pngPath: Annotation<string | undefined>(),
+      pngUrl: Annotation<string | undefined>(),
+      debugPngPath: Annotation<string | undefined>(),
+      iteration: Annotation<number>(),
+      bestIteration: Annotation<BestIteration>(),
+      stopReason: Annotation<string | undefined>(),
+      finalAsset: Annotation<Asset | undefined>(),
+    });
+
+    type BuildStateValue = typeof BuildState.State;
+
+    const requireState = <T>(value: T | undefined, name: string): T => {
+      if (value === undefined || value === null) {
+        throw new Error(`LangGraph build state missing required field: ${name}`);
+      }
+      return value;
+    };
+
+    const graph = new StateGraph(BuildState)
+      .addNode('classify', async () => {
+        options?.onStage?.('classify', 'Classifying asset type', 10);
+        const classification = await this.classifier.classify(request.prompt, {
+          explicitAssetType: request.assetType,
+          width: request.output.width,
+          height: request.output.height,
+          useCase: request.style,
+          hasReference: !!request.referenceImageUrl,
+          onToken: (token) => options?.onLlmToken?.('classify', token),
+          onReasoning: (token) => options?.onReasoning?.('classify', token),
+          onRetry: (attempt, retries, error) => reportRetry('classify', attempt, retries, error),
+        });
+
+        await prisma.asset.update({
+          where: { id: asset.id },
+          data: { assetType: classification.assetType },
+        });
+        options?.onStage?.(
+          'classify',
+          `Detected asset type: ${classification.assetType} (consistency=${classification.requiresConsistency ? 'yes' : 'no'})`,
+          12
+        );
+        return { classification };
+      })
+      .addNode('reference_analyze', async () => {
+        if (!request.referenceImageUrl) {
+          return { referenceAnalysis: undefined };
+        }
+
+        options?.onStage?.('brief', 'Analyzing reference image', 15);
+        const referenceAnalysis = await this.referenceAnalyzer.analyze(request.referenceImageUrl, {
+          onToken: (token) => options?.onLlmToken?.('brief', token),
+          onReasoning: (token) => options?.onReasoning?.('brief', token),
+          onRetry: (attempt, retries, error) => reportRetry('brief', attempt, retries, error),
+        });
+        logger.info({ assetId: asset.id }, 'Reference analysis completed');
+        return { referenceAnalysis };
+      })
+      .addNode('brief', async (state: BuildStateValue) => {
+        const classification = requireState(state.classification, 'classification');
+        options?.onStage?.('brief', 'Building creative brief', 20);
+        const brief = await this.briefBuilder.build(request.prompt, classification, {
+          style: request.style,
+          width: request.output.width,
+          height: request.output.height,
+          referenceAnalysis: state.referenceAnalysis,
+          onToken: (token) => options?.onLlmToken?.('brief', token),
+          onReasoning: (token) => options?.onReasoning?.('brief', token),
+          onRetry: (attempt, retries, error) => reportRetry('brief', attempt, retries, error),
+        });
+        options?.onStage?.(
+          'brief',
+          `Brief ready: subject="${brief.composition.mainFocus}" mood="${brief.style.mood}"`,
+          24
+        );
+        return { brief };
+      })
+      .addNode('style', async (state: BuildStateValue) => {
+        const classification = requireState(state.classification, 'classification');
+        const brief = requireState(state.brief, 'brief');
+        options?.onStage?.('style', 'Building style system', 30);
+        const styleSystem = options?.sharedStyleSystem ?? await this.styleBuilder.build(brief, classification, undefined, {
+          onToken: (token) => options?.onLlmToken?.('style', token),
+          onReasoning: (token) => options?.onReasoning?.('style', token),
+          onRetry: (attempt, retries, error) => reportRetry('style', attempt, retries, error),
+        });
+        options?.onStage?.(
+          'style',
+          `Style system: ${styleSystem.name} with ${Object.keys(styleSystem.palette).length} palette roles`,
+          34
+        );
+        return { styleSystem };
+      })
+      .addNode('layout', async (state: BuildStateValue) => {
+        const classification = requireState(state.classification, 'classification');
+        const brief = requireState(state.brief, 'brief');
+        const styleSystem = requireState(state.styleSystem, 'styleSystem');
+        options?.onStage?.('layout', 'Planning asset strategy and layout', 40);
+        await this.assetPlanner.plan(classification, brief, styleSystem, state.referenceAnalysis);
+        const layout = await this.layoutPlanner.plan(
+          brief,
+          styleSystem,
+          classification,
+          request.output.width,
+          request.output.height,
+          state.referenceAnalysis,
+          {
+            onToken: (token) => options?.onLlmToken?.('layout', token),
+            onReasoning: (token) => options?.onReasoning?.('layout', token),
+            onRetry: (attempt, retries, error) => reportRetry('layout', attempt, retries, error),
+          }
+        );
+        options?.onStage?.(
+          'layout',
+          `Layout planned: ${layout.layers.length} layers on ${layout.canvas.width}x${layout.canvas.height}`,
+          44
+        );
+        return { layout, currentLayout: layout };
+      })
+      .addNode('generate_svg', async (state: BuildStateValue) => {
+        const brief = requireState(state.brief, 'brief');
+        const styleSystem = requireState(state.styleSystem, 'styleSystem');
+        const currentLayout = requireState(state.currentLayout, 'currentLayout');
+        const iteration = state.iteration;
+
+        logger.info({ assetId: asset.id, iteration }, `Starting iteration ${iteration}`);
+        options?.onStage?.('svg', `Generating SVG iteration ${iteration}`, 50);
+        const initialSvg = await this.generateSvgDraft({
+          iteration,
+          brief,
+          styleSystem,
+          layout: currentLayout,
+          currentSvg: state.currentSvg,
+          lastRevisionPlan: state.lastRevisionPlan,
+          onToken: (token) => options?.onLlmToken?.('svg', token),
+          onReasoning: (token) => options?.onReasoning?.('svg', token),
+        });
+
+        const generated = await this.svgGenerationWorkflow.run({
+          brief,
+          styleSystem,
+          layout: currentLayout,
+          width: request.output.width,
+          height: request.output.height,
+          initialSvg,
+          revisionInstruction: state.lastRevisionPlan?.notes,
+          onToken: (token) => options?.onLlmToken?.('svg', token),
+          onReasoning: (token) => options?.onReasoning?.('svg', token),
+          onToolEvent: (message) => {
+            const toolEvent = parseRepairToolEvent(message);
+            if (toolEvent) {
+              options?.onToolEvent?.('svg', toolEvent);
+            }
+            options?.onStage?.('svg', message, 52);
+          },
+          onRetry: (attempt, retries, error) => reportRetry('svg', attempt, retries, error),
+        });
+
+        options?.onStage?.('svg', `SVG draft ready (${Math.round(generated.svg.length / 1024)} KB)`, 56);
+        return {
+          currentSvg: generated.svg,
+          lastValidationSummary: generated.validationSummary,
+        };
+      })
+      .addNode('render_preview', async (state: BuildStateValue) => {
+        const currentLayout = requireState(state.currentLayout, 'currentLayout');
+        const iteration = state.iteration;
+        options?.onStage?.('render', `Rendering preview iteration ${iteration}`, 60);
+        const { pngPath, pngUrl } = await this.svgRender.render(
+          state.currentSvg,
+          asset.id,
+          iteration,
+          request.output.width,
+          request.output.height
+        );
+        options?.onIterationRendered?.(iteration, pngUrl);
+        const { debugPngPath } = await this.debugOverlay.generate(currentLayout, state.currentSvg, asset.id, iteration);
+        return { pngPath, pngUrl, debugPngPath } as Partial<BuildStateValue> & {
+          pngPath: string;
+          pngUrl: string;
+          debugPngPath: string;
+        };
+      })
+      .addNode('evaluate', async (state: BuildStateValue & { pngPath?: string; pngUrl?: string; debugPngPath?: string }) => {
+        const classification = requireState(state.classification, 'classification');
+        const brief = requireState(state.brief, 'brief');
+        const styleSystem = requireState(state.styleSystem, 'styleSystem');
+        const currentLayout = requireState(state.currentLayout, 'currentLayout');
+        const pngPath = requireState(state.pngPath, 'pngPath');
+        const pngUrl = requireState(state.pngUrl, 'pngUrl');
+        const debugPngPath = requireState(state.debugPngPath, 'debugPngPath');
+        const iteration = state.iteration;
+
+        options?.onStage?.('evaluate', `Evaluating iteration ${iteration}`, 70);
+        let evaluation = await this.evaluator.evaluate(
+          classification,
+          brief,
+          styleSystem,
+          currentLayout,
+          pngPath,
+          state.referenceAnalysis,
+          {
+            onToken: (token) => options?.onLlmToken?.('evaluate', token),
+            onReasoning: (token) => options?.onReasoning?.('evaluate', token),
+            svgSource: state.currentSvg,
+            validationSummary: state.lastValidationSummary,
+            previousEvaluationContext: state.evaluation
+              ? {
+                  iteration: iteration - 1,
+                  scores: state.evaluation.scores,
+                  issues: state.evaluation.issues,
+                  revisionPlan: state.lastRevisionPlan,
+                }
+              : undefined,
+            onRetry: (attempt, retries, error) => reportRetry('evaluate', attempt, retries, error),
+          }
+        );
+        options?.onStage?.(
+          'evaluate',
+          `Evaluation: ${Object.entries(evaluation.scores)
+            .slice(0, 3)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ')}`,
+          74
+        );
+
+        await prisma.assetIteration.create({
+          data: {
+            assetId: asset.id,
+            iterationNumber: iteration,
+            brief: brief as unknown as Prisma.JsonValue,
+            styleSystem: styleSystem as unknown as Prisma.JsonValue,
+            referenceAnalysis: state.referenceAnalysis
+              ? (state.referenceAnalysis as unknown as Prisma.JsonValue)
+              : Prisma.JsonNull,
+            layout: currentLayout as unknown as Prisma.JsonValue,
+            svgDraftPath: state.currentSvg,
+            pngPreviewPath: pngUrl,
+            debugPreviewPath: debugPngPath,
+            scores: evaluation.scores as unknown as Prisma.JsonValue,
+            issues: evaluation.issues as unknown as Prisma.JsonValue,
+            actionTaken: state.lastRevisionPlan
+              ? (state.lastRevisionPlan as unknown as Prisma.JsonValue)
+              : Prisma.JsonNull,
+          },
+        });
+
+        await prisma.asset.update({
+          where: { id: asset.id },
+          data: { currentIteration: iteration },
+        });
+
+        const issueAnalysis = issueTracker.trackIssues(evaluation.issues, iteration);
+        let bestIteration = state.bestIteration;
+        const currentScore = evaluation.scores.overall ?? 0;
+        const bestScore = bestIteration.scores.overall ?? 0;
+        if (
+          currentScore > bestScore ||
+          (currentScore === bestScore && evaluation.issues.length < bestIteration.issues.length)
+        ) {
+          bestIteration = {
+            iteration,
+            svg: state.currentSvg,
+            scores: evaluation.scores,
+            issues: evaluation.issues,
+            pngUrl,
+          };
+        }
+
+        logger.info(
+          {
+            assetId: asset.id,
+            iteration,
+            continueIteration: evaluation.continueIteration,
+            newIssues: issueAnalysis.newIssues.length,
+            staleIssues: issueAnalysis.staleIssues.length,
+            resolvedIssues: issueAnalysis.resolvedIssues.length,
+          },
+          'Iteration completed'
+        );
+
+        let stopReason: string | undefined;
+        if (!evaluation.continueIteration) {
+          logger.info({ assetId: asset.id }, 'No more issues, stopping iteration loop');
+        } else {
+          const forceStop = issueTracker.shouldForceStop(iteration);
+          if (forceStop.shouldStop) {
+            logger.info({ assetId: asset.id, reason: forceStop.reason }, 'Forced stop detected');
+            options?.onStage?.('evaluate', `Stopping: ${forceStop.reason}. Using best iteration (#${bestIteration.iteration})`, 74);
+            evaluation = {
+              ...evaluation,
+              scores: bestIteration.scores,
+              issues: bestIteration.issues,
+              continueIteration: false,
+            };
+            stopReason = forceStop.reason;
+          }
+        }
+
+        return {
+          evaluation,
+          bestIteration,
+          currentSvg: stopReason ? bestIteration.svg : state.currentSvg,
+          stopReason,
+        };
+      })
+      .addNode('revise', async (state: BuildStateValue) => {
+        const classification = requireState(state.classification, 'classification');
+        const currentLayout = requireState(state.currentLayout, 'currentLayout');
+        const evaluation = requireState(state.evaluation, 'evaluation');
+        const iteration = state.iteration;
+
+        options?.onStage?.('revise', `Planning revision from iteration ${iteration}`, 80);
+        const lastRevisionPlan = await this.revisionPlanner.plan(
+          currentLayout,
+          state.currentSvg,
+          evaluation.issues,
+          iteration,
+          classification,
+          {
+            onToken: (token) => options?.onLlmToken?.('revise', token),
+            onReasoning: (token) => options?.onReasoning?.('revise', token),
+            onRetry: (attempt, retries, error) => reportRetry('revise', attempt, retries, error),
+          }
+        );
+
+        let nextLayout = currentLayout;
+        if (lastRevisionPlan.updatedLayout && Object.keys(lastRevisionPlan.updatedLayout).length > 0) {
+          nextLayout = deepMerge(currentLayout, lastRevisionPlan.updatedLayout) as LayoutBlueprint;
+        }
+
+        return {
+          lastRevisionPlan,
+          currentLayout: nextLayout,
+          iteration: iteration + 1,
+        };
+      })
+      .addNode('optimize_export', async (state: BuildStateValue) => {
+        const evaluation = requireState(state.evaluation, 'evaluation');
+        options?.onStage?.('optimize', 'Sanitizing and optimizing final SVG', 90);
+        const sanitizedSvg = sanitizeSvg(state.currentSvg);
+        const optimizationResult = await this.svgOptimizer.optimize(sanitizedSvg);
+
+        options?.onStage?.('export', 'Saving final outputs', 98);
+        const finalSvgPath = await this.storage.saveAssetFile(asset.id, 'final.svg', optimizationResult.optimizedSvg);
+        const finalSvgUrl = `/${finalSvgPath}`;
+        const finalPngUrl = (await this.svgRender.render(
+          optimizationResult.optimizedSvg,
+          asset.id,
+          999,
+          request.output.width,
+          request.output.height
+        )).pngUrl;
+
+        const updatedAsset = await prisma.asset.update({
+          where: { id: asset.id },
+          data: {
+            status: 'completed',
+            finalSvgPath: finalSvgUrl,
+            finalPngPath: finalPngUrl,
+            finalDebugPngPath: undefined,
+            bestIterationNumber: state.bestIteration.iteration,
+            finalScores: evaluation.scores as unknown as Prisma.JsonValue,
+          },
+        });
+
+        logger.info({ assetId: asset.id }, 'Pipeline completed successfully');
+        return { finalAsset: updatedAsset };
+      })
+      .addEdge(START, 'classify')
+      .addEdge('classify', 'reference_analyze')
+      .addEdge('reference_analyze', 'brief')
+      .addEdge('brief', 'style')
+      .addEdge('style', 'layout')
+      .addEdge('layout', 'generate_svg')
+      .addEdge('generate_svg', 'render_preview')
+      .addEdge('render_preview', 'evaluate')
+      .addConditionalEdges(
+        'evaluate',
+        (state: BuildStateValue) => {
+          const shouldRevise =
+            Boolean(state.evaluation?.continueIteration) &&
+            !state.stopReason &&
+            state.iteration < maxIterations;
+          return shouldRevise ? 'revise' : 'optimize_export';
+        },
+        ['revise', 'optimize_export']
+      )
+      .addEdge('revise', 'generate_svg')
+      .addEdge('optimize_export', END)
+      .compile();
+
+    const result = await graph.invoke(
+      {
+        classification: undefined,
+        referenceAnalysis: undefined,
+        brief: undefined,
+        styleSystem: undefined,
+        layout: undefined,
+        currentLayout: undefined,
+        currentSvg: '',
+        evaluation: undefined,
+        lastRevisionPlan: undefined,
+        lastValidationSummary: undefined,
+        pngPath: undefined,
+        pngUrl: undefined,
+        debugPngPath: undefined,
+        iteration: 1,
+        bestIteration: {
+          iteration: 1,
+          svg: '',
+          scores: {} as EvaluationResult['scores'],
+          issues: [],
+          pngUrl: '',
+        },
+        stopReason: undefined,
+        finalAsset: undefined,
+      },
+      {
+        configurable: {
+          thread_id: asset.id,
+        },
+        runName: 'svg_asset_build_pipeline',
+      }
+    );
+
+    return requireState(result.finalAsset, 'finalAsset');
+  }
+
   private retryProgressForStage(stage: import('@svg-builder/shared').PipelineStage): number {
     const progressByStage: Record<import('@svg-builder/shared').PipelineStage, number> = {
       classify: 11,
@@ -726,6 +1209,31 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
 function readNumber(value: unknown, fallback: number): number {
   const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : fallback;
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseRepairToolEvent(
+  message: string
+): { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string } | undefined {
+  const match = /Repair tool (requested|completed|failed): ([\w-]+)|Calling repair tool: ([\w-]+)/i.exec(message);
+  if (!match) {
+    return undefined;
+  }
+
+  if (match[3]) {
+    return { name: match[3], status: 'running', message };
+  }
+
+  const statusByVerb = {
+    requested: 'requested',
+    completed: 'completed',
+    failed: 'failed',
+  } as const;
+  const verb = match[1]?.toLowerCase() as keyof typeof statusByVerb;
+  const name = match[2];
+  if (!name || !statusByVerb[verb]) {
+    return undefined;
+  }
+  return { name, status: statusByVerb[verb], message };
 }
 
 function deepMerge(base: unknown, patch: unknown): unknown {

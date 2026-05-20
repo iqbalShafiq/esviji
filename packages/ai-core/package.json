@@ -18,9 +18,9 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
+    "@langchain/openai": "^1.4.6",
     "@svg-builder/shared": "workspace:*",
     "@types/json-schema": "^7.0.15",
-    "openai": "^4.0.0",
     "zod": "^3.22.0",
     "zod-to-json-schema": "^3.25.2"
   },
