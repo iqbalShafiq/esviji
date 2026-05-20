@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { AssetResponse, BackgroundMode, PreviewSize } from "../../types/index.js";
 import { formatScore } from "../../lib/formatters.js";
+import { resolveApiAssetUrl } from "../../lib/download.js";
 
 interface PreviewCanvasProps {
   asset?: AssetResponse;
@@ -272,9 +273,7 @@ export function PreviewCanvas({
 
 function resolvePreviewUrl(input?: string): string | undefined {
   if (!input) return undefined;
-  if (/^https?:\/\//i.test(input)) return input;
-  const base = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000").replace(/\/$/, "");
-  return `${base}${input.startsWith("/") ? "" : "/"}${input}`;
+  return resolveApiAssetUrl(input);
 }
 
 function stripBackgroundLayer(svg?: string): string | undefined {

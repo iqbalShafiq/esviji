@@ -1,4 +1,5 @@
 import axios from "axios";
+import { resolveApiAssetUrl } from "./download.js";
 import type {
   BuildSvgAssetRequest,
   BuildSvgPackRequest,
@@ -84,6 +85,7 @@ export function subscribeJobStream(
     onFlow?: (flow: { stage: string; message: string; at: string; progress?: number }) => void;
     onModelToken?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
     onReasoning?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
+    onClearStream?: (event: { stage: string; content: string; at: string; sequence: number }) => void;
     onError?: (error: string) => void;
   }
 ): () => void {
@@ -128,13 +130,21 @@ export function subscribeJobStream(
     }
   });
 
-  source.addEventListener("reasoning", (event) => {
-    try {
-      handlers.onReasoning?.(JSON.parse((event as MessageEvent).data));
-    } catch {
-      handlers.onError?.("Failed to parse reasoning stream event");
-    }
-  });
+    source.addEventListener("reasoning", (event) => {
+      try {
+        handlers.onReasoning?.(JSON.parse((event as MessageEvent).data));
+      } catch {
+        handlers.onError?.("Failed to parse reasoning stream event");
+      }
+    });
+
+    source.addEventListener("clear", (event) => {
+      try {
+        handlers.onClearStream?.(JSON.parse((event as MessageEvent).data));
+      } catch {
+        handlers.onError?.("Failed to parse stream clear event");
+      }
+    });
 
   source.onerror = () => {
     handlers.onError?.("SSE connection error");
@@ -233,7 +243,7 @@ function normalizeAsset(raw: RawAsset, finalSvg?: string): AssetResponse {
     ? raw.iterations.map((it, index) => ({
         iteration: it.iterationNumber ?? it.iteration ?? index + 1,
         svg: it.svgDraftPath,
-        pngUrl: it.pngPreviewPath,
+        pngUrl: it.pngPreviewPath ? resolveApiAssetUrl(it.pngPreviewPath) : undefined,
         scores: it.scores,
         issues: Array.isArray(it.issues) ? it.issues : [],
         revisionPlan: it.actionTaken,
@@ -261,7 +271,7 @@ function normalizeAsset(raw: RawAsset, finalSvg?: string): AssetResponse {
     styleSystem: raw.styleSystem,
     layoutBlueprint: raw.layoutBlueprint,
     finalSvg: finalSvg ?? raw.finalSvg,
-    finalPngUrl: raw.finalPngPath,
+    finalPngUrl: raw.finalPngPath ? resolveApiAssetUrl(raw.finalPngPath) : undefined,
     iterations,
     evaluation: raw.evaluation ??
       (lastIteration

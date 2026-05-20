@@ -57,6 +57,9 @@ export default function PackBuilderPage() {
       onReasoning: ({ stage, content }) => {
         setJob((current) => appendJobStream(current, "stageReasoningStreams", stage, content));
       },
+      onClearStream: ({ stage }) => {
+        setJob((current) => clearJobStream(current, stage));
+      },
     });
 
     return () => {
@@ -144,6 +147,21 @@ export default function PackBuilderPage() {
       />
     </StudioFrame>
   );
+}
+
+function clearJobStream(job: JobResponse | undefined, stage: string): JobResponse | undefined {
+  if (!job) return job;
+  return {
+    ...job,
+    stageStreams: {
+      ...(job.stageStreams ?? {}),
+      [stage]: "",
+    },
+    stageReasoningStreams: {
+      ...(job.stageReasoningStreams ?? {}),
+      [stage]: "",
+    },
+  };
 }
 
 function appendJobStream(

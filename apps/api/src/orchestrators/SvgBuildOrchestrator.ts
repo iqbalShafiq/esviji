@@ -338,10 +338,7 @@ export class SvgBuildOrchestrator {
 
           // Apply layout updates if revision plan includes them
           if (lastRevisionPlan.updatedLayout && Object.keys(lastRevisionPlan.updatedLayout).length > 0) {
-            currentLayout = {
-              ...currentLayout,
-              ...(lastRevisionPlan.updatedLayout as Record<string, unknown>),
-            } as LayoutBlueprint;
+            currentLayout = deepMerge(currentLayout, lastRevisionPlan.updatedLayout) as LayoutBlueprint;
           }
         }
       }
@@ -575,7 +572,7 @@ export class SvgBuildOrchestrator {
             transformedSvg = applyTransformToLayer(
               transformedSvg,
               String(transform.layerId),
-              String(transform.transform)
+              serializeLayerTransform(transform.transform)
             );
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -590,7 +587,7 @@ export class SvgBuildOrchestrator {
         return this.svgCoder.code(input.brief, input.styleSystem, input.layout, {
           previousSvg: input.currentSvg,
           revisionInstruction: `${
-            input.lastRevisionPlan.notes
+            buildRevisionInstruction(input.lastRevisionPlan)
           }\nThe previous layer_transform plan failed, so regenerate the SVG instead. Transform errors:\n${transformErrors.join('\n')}`,
           onToken: input.onToken,
           onReasoning: input.onReasoning,
@@ -599,7 +596,7 @@ export class SvgBuildOrchestrator {
 
       return this.svgCoder.code(input.brief, input.styleSystem, input.layout, {
         previousSvg: input.currentSvg,
-        revisionInstruction: input.lastRevisionPlan.notes,
+        revisionInstruction: buildRevisionInstruction(input.lastRevisionPlan),
         onToken: input.onToken,
         onReasoning: input.onReasoning,
       });
@@ -612,4 +609,75 @@ export class SvgBuildOrchestrator {
       onReasoning: input.onReasoning,
     });
   }
+}
+
+function buildRevisionInstruction(plan: RevisionPlan): string {
+  return JSON.stringify(
+    {
+      strategy: plan.strategy,
+      updatedLayout: plan.updatedLayout,
+      layerTransforms: plan.layerTransforms,
+      layersToRegenerate: plan.layersToRegenerate,
+      notes: plan.notes,
+    },
+    null,
+    2
+  );
+}
+
+function serializeLayerTransform(transform: NonNullable<RevisionPlan['layerTransforms']>[number]['transform']): string {
+  if (typeof transform === 'string') {
+    return transform;
+  }
+
+  const parts: string[] = [];
+  const translate = readRecord(transform.translate);
+  if (translate) {
+    const x = readNumber(translate.x, 0);
+    const y = readNumber(translate.y, 0);
+    parts.push(`translate(${x} ${y})`);
+  }
+
+  const scale = typeof transform.scale === 'number' || typeof transform.scale === 'string'
+    ? Number(transform.scale)
+    : undefined;
+  if (typeof scale === 'number' && Number.isFinite(scale)) {
+    parts.push(`scale(${scale})`);
+  }
+
+  const rotate = typeof transform.rotate === 'number' || typeof transform.rotate === 'string'
+    ? Number(transform.rotate)
+    : undefined;
+  if (typeof rotate === 'number' && Number.isFinite(rotate)) {
+    parts.push(`rotate(${rotate})`);
+  }
+
+  if (parts.length === 0) {
+    throw new Error(`Unsupported layer transform object: ${JSON.stringify(transform)}`);
+  }
+
+  return parts.join(' ');
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function readNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : fallback;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function deepMerge(base: unknown, patch: unknown): unknown {
+  const baseRecord = readRecord(base);
+  const patchRecord = readRecord(patch);
+  if (!baseRecord || !patchRecord) {
+    return patch;
+  }
+
+  const merged: Record<string, unknown> = { ...baseRecord };
+  for (const [key, value] of Object.entries(patchRecord)) {
+    merged[key] = deepMerge(baseRecord[key], value);
+  }
+  return merged;
 }

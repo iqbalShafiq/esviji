@@ -6,7 +6,7 @@ export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
 export type JobStreamEvent = {
   sequence: number;
-  type: 'model' | 'reasoning';
+  type: 'model' | 'reasoning' | 'clear';
   stage: PipelineStage;
   content: string;
   at: string;
@@ -81,6 +81,22 @@ export class JobService {
       currentStage: stage,
       progress,
       logs: [...job.logs, { stage, message, at: new Date().toISOString(), progress }],
+    }));
+  }
+
+  async clearStageOutput(jobId: string, stage: PipelineStage): Promise<void> {
+    await this.mutate(jobId, (job) => ({
+      status: 'running',
+      currentStage: stage,
+      stageStreams: {
+        ...(job.stageStreams ?? {}),
+        [stage]: '',
+      },
+      stageReasoningStreams: {
+        ...(job.stageReasoningStreams ?? {}),
+        [stage]: '',
+      },
+      streamEvents: this.appendStreamEvent(job, 'clear', stage, ''),
     }));
   }
 

@@ -46,6 +46,9 @@ export class SvgAssetsController {
           await this.jobService.start(jobId);
           const asset = await this.orchestrator.build(body, {
             onStage: (stage, message, progress) => {
+              if (shouldClearStageOutput(message)) {
+                void this.jobService.clearStageOutput(jobId, stage);
+              }
               void this.jobService.stage(jobId, stage, progress, message);
             },
             onLlmToken: (stage, token) => {
@@ -342,4 +345,8 @@ export class SvgAssetsController {
       { name: 'Asset thresholds passed', passed: meetsThresholds },
     ];
   }
+}
+
+function shouldClearStageOutput(message: string): boolean {
+  return /^(Retrying .+ flow|Generating SVG iteration|Evaluating iteration|Planning revision from iteration|Classifying|Analyzing reference image|Building creative brief|Building style system|Planning asset strategy and layout|Planning pack items|Building shared style system|Evaluating pack consistency)/i.test(message);
 }

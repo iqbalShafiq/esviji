@@ -31,6 +31,8 @@ Planning rules:
 - If an issue names a layer that does not exist in the SVG source, choose full_regenerate or layer_regenerate instead of layer_transform.
 - Prefer layer_transform only when the target <g id="..."> exists and the requested fix is a small geometric adjustment.
 - Use full_regenerate when the SVG is visually generic, sparse, technically invalid, or structurally inconsistent with the layout.
+- Make the plan directly executable: target exact layer IDs from the current SVG, keep transform values as valid SVG transform strings when using layer_transform, and put concrete regeneration instructions in notes.
+- If a layout change is needed, include only the layout fields that must change in updatedLayout and explain why in notes.
 
 Return JSON only, no markdown.`;
 

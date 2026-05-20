@@ -13,7 +13,7 @@ export function buildSvgCoderPrompt(params: {
 Creative brief: ${JSON.stringify(params.brief, null, 2)}
 Style system: ${JSON.stringify(params.styleSystem, null, 2)}
 Layout plan: ${JSON.stringify(params.layout, null, 2)}
-${params.revisionInstruction ? `Revision instruction: ${params.revisionInstruction}` : ""}
+${params.revisionInstruction ? `Revision instruction / structured revision plan:\n${params.revisionInstruction}` : ""}
 ${params.previousErrorContext ? `Previous failed attempt context:\n${params.previousErrorContext}` : ""}
 ${params.previousSvg ? `Previous SVG to revise:\n${params.previousSvg}` : ""}
 
@@ -29,6 +29,7 @@ Requirements:
 - Use viewBox and appropriate xmlns
 - Keep it clean and editable
 - Use only safe SVG elements and attributes; do not use script, style, foreignObject, image, external URLs, data URLs, or event handlers
+- When a structured revision plan is provided, follow its strategy, layersToRegenerate, layerTransforms failure context, and updated layout intent explicitly. Preserve resolved parts of the previous SVG when possible.
 
 Output SVG markup only.`;
 

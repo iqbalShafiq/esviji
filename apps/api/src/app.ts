@@ -145,7 +145,7 @@ export async function buildApp() {
   const svgValidation = new SvgValidationService();
   const svgRender = new SvgRenderService(storageService);
   const svgOptimizer = new SvgOptimizerService();
-  const evaluator = new AssetTypeEvaluatorService(llmProvider);
+  const evaluator = new AssetTypeEvaluatorService(llmProvider, langChainModelConfig);
   const revisionPlanner = new RevisionPlannerService(llmProvider);
   const debugOverlay = new DebugOverlayService(storageService);
   const packPlanner = new PackPlannerService(llmProvider);

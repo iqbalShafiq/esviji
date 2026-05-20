@@ -4,7 +4,7 @@ export function buildEvaluatorPrompt(params: {
   styleSystem: unknown;
   layout: unknown;
   referenceAnalysis?: unknown;
-  renderedPreviewBase64?: string;
+  hasRenderedPreview?: boolean;
   svgSource?: string;
   validationSummary?: { valid: boolean; errors: string[]; warnings: string[] };
   previousEvaluationContext?: unknown;
@@ -18,7 +18,7 @@ Creative brief: ${JSON.stringify(params.brief, null, 2)}
 Style system: ${JSON.stringify(params.styleSystem, null, 2)}
 Layout plan: ${JSON.stringify(params.layout, null, 2)}
 ${params.referenceAnalysis ? `Reference analysis: ${JSON.stringify(params.referenceAnalysis, null, 2)}` : ""}
-${params.renderedPreviewBase64 ? `Rendered preview PNG (base64): ${params.renderedPreviewBase64}` : ""}
+${params.hasRenderedPreview ? "Rendered preview PNG is attached as an image input. Use it as the primary source for visual quality, composition, crop, readability, and style adherence." : "Rendered preview PNG is unavailable; evaluate from SVG source and specs only."}
 ${params.svgSource ? `SVG source:\n${params.svgSource}` : ""}
 ${params.validationSummary ? `SVG validation summary: ${JSON.stringify(params.validationSummary, null, 2)}` : ""}
 ${params.previousEvaluationContext ? `Previous evaluation context: ${JSON.stringify(params.previousEvaluationContext, null, 2)}\nUse this to determine whether earlier fixes are now resolved, which issues remain, and whether the current SVG regressed on prior scores.` : ""}
