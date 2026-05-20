@@ -20,7 +20,7 @@ export abstract class LlmProvider {
   async generateJson<T>(
     systemPrompt: string,
     userPrompt: string,
-    schema: z.ZodSchema<T>,
+    schema: z.ZodType<T, any, any>,
     options?: Omit<GenerateTextOptions, "jsonSchema">
   ): Promise<T> {
     const text = await this.generateText(systemPrompt, userPrompt, { ...options, responseFormat: "json_object" });

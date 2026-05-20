@@ -39,53 +39,25 @@ export class OpenAiProvider extends LlmProvider {
   ): Promise<string> {
     const reasoningEffort = options?.reasoningEffort ?? "medium";
 
-    // Try Responses API first (supports reasoning streaming)
-    if (options?.onToken || options?.onReasoning) {
+    // If reasoning streaming is requested, use Responses API (supports reasoning streaming)
+    if (options?.onReasoning) {
       try {
-        const stream = await this.createResponsesStream(
-          systemPrompt,
-          userPrompt,
-          options,
-          reasoningEffort
-        );
-
-        let full = "";
-        for await (const event of stream) {
-          // Handle text output
-          if (event.type === "response.output_text.delta") {
-            const textEvent = event as unknown as ResponseTextDeltaEvent;
-            if (textEvent.delta && options.onToken) {
-              full += textEvent.delta;
-              options.onToken(textEvent.delta);
-            }
-          }
-          
-          // Handle reasoning summary text
-          if (event.type === "response.reasoning_summary_text.delta") {
-            const reasoningEvent = event as unknown as ResponseReasoningSummaryTextDeltaEvent;
-            if (reasoningEvent.delta && options.onReasoning) {
-              options.onReasoning(reasoningEvent.delta);
-            }
-          }
-          
-          // Handle reasoning summary part added
-          if (event.type === "response.reasoning_summary_part.added") {
-            const partEvent = event as unknown as ResponseReasoningSummaryPartAddedEvent;
-            if (partEvent.part?.text && options.onReasoning) {
-              options.onReasoning(partEvent.part.text);
-            }
-          }
-        }
-
-        if (full.trim().length > 0) {
-          return full;
-        }
+        return await this.streamWithResponses(systemPrompt, userPrompt, options, reasoningEffort);
       } catch (error) {
-        console.warn("Responses API streaming failed, falling back:", error);
+        console.warn("Responses API reasoning streaming failed, falling back:", error);
       }
     }
 
-    // Try non-streaming Responses API
+    // If token streaming is requested (without reasoning), use Chat Completions API
+    if (options?.onToken) {
+      try {
+        return await this.streamWithChatCompletions(systemPrompt, userPrompt, options, reasoningEffort);
+      } catch (error) {
+        console.warn("Chat Completions streaming failed, falling back:", error);
+      }
+    }
+
+    // Try non-streaming Responses API (supports json_schema enforcement)
     try {
       const response = await this.createResponses(
         systemPrompt,
@@ -107,8 +79,86 @@ export class OpenAiProvider extends LlmProvider {
       console.warn("Responses API failed, falling back to chat completions:", error);
     }
 
-    // Fallback to Chat Completions API
+    // Fallback to non-streaming Chat Completions API
     return this.fallbackToChatCompletions(systemPrompt, userPrompt, options, reasoningEffort);
+  }
+
+  private async streamWithResponses(
+    systemPrompt: string,
+    userPrompt: string,
+    options: GenerateTextOptions | undefined,
+    reasoningEffort: ReasoningEffort
+  ): Promise<string> {
+    const stream = await this.createResponsesStream(systemPrompt, userPrompt, options, reasoningEffort);
+
+    let full = "";
+    for await (const event of stream) {
+      // Handle text output
+      if (event.type === "response.output_text.delta") {
+        const textEvent = event as unknown as ResponseTextDeltaEvent;
+        if (textEvent.delta && options?.onToken) {
+          full += textEvent.delta;
+          options.onToken(textEvent.delta);
+        }
+      }
+      
+      // Handle reasoning summary text
+      if (event.type === "response.reasoning_summary_text.delta") {
+        const reasoningEvent = event as unknown as ResponseReasoningSummaryTextDeltaEvent;
+        if (reasoningEvent.delta && options?.onReasoning) {
+          options.onReasoning(reasoningEvent.delta);
+        }
+      }
+      
+      // Handle reasoning summary part added
+      if (event.type === "response.reasoning_summary_part.added") {
+        const partEvent = event as unknown as ResponseReasoningSummaryPartAddedEvent;
+        if (partEvent.part?.text && options?.onReasoning) {
+          options.onReasoning(partEvent.part.text);
+        }
+      }
+    }
+
+    if (full.trim().length === 0) {
+      throw new Error("Responses API streaming returned empty content");
+    }
+
+    return full;
+  }
+
+  private async streamWithChatCompletions(
+    systemPrompt: string,
+    userPrompt: string,
+    options: GenerateTextOptions | undefined,
+    reasoningEffort: ReasoningEffort
+  ): Promise<string> {
+    const stream = await this.client.chat.completions.create({
+      model: this.defaultModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.maxTokens,
+      ...(options?.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
+      reasoning_effort: reasoningEffort,
+      stream: true,
+    });
+
+    let full = "";
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        full += content;
+        options?.onToken?.(content);
+      }
+    }
+
+    if (full.trim().length === 0) {
+      throw new Error("Chat Completions streaming returned empty content");
+    }
+
+    return full;
   }
 
   private async createResponses(
@@ -257,7 +307,7 @@ export class OpenAiProvider extends LlmProvider {
   override async generateJson<T>(
     systemPrompt: string,
     userPrompt: string,
-    schema: z.ZodSchema<T>,
+    schema: z.ZodType<T, any, any>,
     options?: Omit<GenerateTextOptions, "jsonSchema">
   ): Promise<T> {
     const jsonSchema = zodToJsonSchema(schema, { name: "response", $refStrategy: "none" });

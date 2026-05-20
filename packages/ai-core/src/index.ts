@@ -17,4 +17,4 @@ export { buildReferenceAnalysisPrompt } from "./prompts/referenceAnalyzer.prompt
 
 // Utils
 export { repairJson } from "./utils/jsonRepair.js";
-export { generateStructuredOutput } from "./utils/structuredOutput.js";
+export { generateStructuredOutput, zodSchemaToPrompt } from "./utils/structuredOutput.js";

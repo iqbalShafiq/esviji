@@ -1,8 +1,15 @@
 import { z } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { LlmProvider } from "../providers/LlmProvider.js";
 import { repairJson } from "./jsonRepair.js";
 
 const DEFAULT_MAX_RETRIES = 3;
+
+export function zodSchemaToPrompt(schema: z.ZodType<any, any, any>): string {
+  const jsonSchema = zodToJsonSchema(schema, { name: "response", $refStrategy: "none" });
+  const cleanSchema = jsonSchema.definitions?.response ?? jsonSchema;
+  return JSON.stringify(cleanSchema, null, 2);
+}
 
 function buildRetryPrompt(userPrompt: string, errors: Error[]): string {
   if (errors.length === 0) {
@@ -28,7 +35,7 @@ export async function generateStructuredOutput<T>(
   provider: LlmProvider,
   systemPrompt: string,
   userPrompt: string,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  schema: z.ZodType<T, any, any>,
   options?: {
     maxRetries?: number;
     onToken?: (token: string) => void;
@@ -40,14 +47,28 @@ export async function generateStructuredOutput<T>(
   let lastError: Error | undefined;
   const errors: Error[] = [];
 
+  // Convert Zod schema to JSON Schema for prompt enrichment
+  const jsonSchema = zodToJsonSchema(schema, { name: "response", $refStrategy: "none" });
+  const cleanSchema = jsonSchema.definitions?.response ?? jsonSchema;
+  
+  // Add schema to prompt so LLM knows exact structure expected
+  const enhancedSystemPrompt = `${systemPrompt}
+
+You must return a JSON object that strictly follows this schema:
+${JSON.stringify(cleanSchema, null, 2)}`;
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const text = await provider.generateText(systemPrompt, buildRetryPrompt(userPrompt, errors), {
-        responseFormat: "json_object",
-        reasoningEffort: "medium",
-        onToken: options?.onToken,
-        onReasoning: options?.onReasoning,
-      });
+      const text = await provider.generateText(
+        enhancedSystemPrompt,
+        buildRetryPrompt(userPrompt, errors),
+        {
+          responseFormat: "json_object",
+          reasoningEffort: "medium",
+          onToken: options?.onToken,
+          onReasoning: options?.onReasoning,
+        }
+      );
       const parsedJson = JSON.parse(repairJson(text));
       const parsed = schema.parse(parsedJson);
       return parsed;
