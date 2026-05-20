@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "../components/layout/AppShell.js";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { AssetBuilderForm } from "../components/builder/AssetBuilderForm.js";
@@ -19,6 +21,9 @@ import type { AssetResponse, PreviewMode, BackgroundMode, PreviewSize, JobRespon
 import { getAsset, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
 
 export default function AssetBuilderPage() {
+  const [searchParams] = useSearchParams();
+  const loadAssetId = searchParams.get("load");
+
   const [asset, setAsset] = useState<AssetResponse | undefined>();
   const [jobId, setJobId] = useState<string | undefined>();
   const [job, setJob] = useState<JobResponse | undefined>();
@@ -27,6 +32,18 @@ export default function AssetBuilderPage() {
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
   const [isLoading, setIsLoading] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
+
+  const { data: loadedAsset } = useQuery({
+    queryKey: ["asset", loadAssetId],
+    queryFn: () => getAsset(loadAssetId!),
+    enabled: !!loadAssetId && !asset,
+  });
+
+  useEffect(() => {
+    if (loadedAsset) {
+      setAsset(loadedAsset);
+    }
+  }, [loadedAsset]);
 
   const handleSubmitStart = () => {
     setIsLoading(true);

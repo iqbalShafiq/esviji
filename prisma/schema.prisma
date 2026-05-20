@@ -23,6 +23,7 @@ model Asset {
   finalPngPath      String?
   finalDebugPngPath String?
   currentIteration  Int       @default(0)
+  bestIterationNumber Int?    
   finalScores       Json?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

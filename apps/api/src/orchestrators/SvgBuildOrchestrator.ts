@@ -426,6 +426,7 @@ export class SvgBuildOrchestrator {
           finalSvgPath: finalSvgUrl,
           finalPngPath: finalPngUrl,
           finalDebugPngPath: undefined,
+          bestIterationNumber: bestIteration.iteration,
           finalScores: evaluation
             ? (evaluation.scores as unknown as Prisma.JsonValue)
             : Prisma.JsonNull,

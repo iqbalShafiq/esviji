@@ -28,6 +28,7 @@ declare module '@prisma/client' {
     finalPngPath: string | null;
     finalDebugPngPath: string | null;
     currentIteration: number;
+    bestIterationNumber: number | null;
     finalScores: unknown | null;
     createdAt: Date;
     updatedAt: Date;
@@ -74,7 +75,11 @@ declare module '@prisma/client' {
       where: { id: string };
       include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number } };
     }): Promise<(Asset & { iterations: AssetIteration[] }) | null>;
-    findMany(args?: { where?: { packId?: string } }): Promise<Asset[]>;
+    findMany(args?: {
+      where?: { packId?: string };
+      orderBy?: { createdAt?: 'asc' | 'desc' } | Array<{ createdAt?: 'asc' | 'desc' }>;
+      include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number } };
+    }): Promise<(Asset & { iterations?: AssetIteration[] })[]>;
     update(args: { where: { id: string }; data: Partial<Asset> }): Promise<Asset>;
   }
 

@@ -6,6 +6,7 @@ export function TopBar() {
   const navLinks = [
     { to: "/assets/new", label: "Asset Builder" },
     { to: "/packs/new", label: "Pack Builder" },
+    { to: "/history", label: "History" },
   ];
 
   return (

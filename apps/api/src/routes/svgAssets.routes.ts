@@ -5,6 +5,10 @@ export async function svgAssetsRoutes(
   app: FastifyInstance,
   controller: SvgAssetsController
 ): Promise<void> {
+  app.get('/api/assets', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.list(request, reply);
+  });
+
   app.post('/api/assets/svg/build', async (request: FastifyRequest, reply: FastifyReply) => {
     await controller.build(request as Parameters<SvgAssetsController['build']>[0], reply);
   });

@@ -275,6 +275,51 @@ export class SvgAssetsController {
     }
   }
 
+  async list(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    try {
+      const assets = await prisma.asset.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          iterations: {
+            orderBy: { iterationNumber: 'desc' },
+            take: 1,
+          },
+        },
+      });
+
+      const data = assets.map((asset) => {
+        const latestIteration = asset.iterations?.[0];
+        return {
+          id: asset.id,
+          name: asset.name,
+          prompt: asset.prompt,
+          assetType: asset.assetType,
+          mode: asset.mode,
+          style: asset.style,
+          status: asset.status,
+          width: asset.width,
+          height: asset.height,
+          currentIteration: asset.currentIteration,
+          bestIterationNumber: asset.bestIterationNumber,
+          finalPngPath: asset.finalPngPath,
+          createdAt: asset.createdAt,
+          updatedAt: asset.updatedAt,
+          latestScores: latestIteration?.scores ?? {},
+          latestPngPreviewPath: latestIteration?.pngPreviewPath ?? undefined,
+        };
+      });
+
+      reply.status(200).send({ success: true, data });
+    } catch (error) {
+      logger.error({ error }, 'Failed to list assets');
+      reply.status(500).send({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Failed to list assets',
+      });
+    }
+  }
+
   async getById(
     request: FastifyRequest<{ Params: { assetId: string } }>,
     reply: FastifyReply

@@ -190,6 +190,30 @@ export async function optimizeSvg(data: OptimizeSvgRequest): Promise<{ svg: stri
   return res.data;
 }
 
+export interface AssetListItem {
+  id: string;
+  name?: string | null;
+  prompt: string;
+  assetType: string;
+  mode: string;
+  style?: string | null;
+  status: string;
+  width: number;
+  height: number;
+  currentIteration: number;
+  bestIterationNumber?: number | null;
+  finalPngPath?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  latestScores: Record<string, number>;
+  latestPngPreviewPath?: string;
+}
+
+export async function listAssets(): Promise<AssetListItem[]> {
+  const res = await api.get<ApiEnvelope<AssetListItem[]>>('/api/assets');
+  return unwrapEnvelope(res.data);
+}
+
 export async function getAsset(assetId: string): Promise<AssetResponse> {
   const res = await api.get<ApiEnvelope<RawAsset>>(`/api/assets/${assetId}`);
   const raw = unwrapEnvelope(res.data);

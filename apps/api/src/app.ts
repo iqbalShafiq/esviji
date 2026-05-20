@@ -3,6 +3,15 @@ import cors from '@fastify/cors';
 import dotenv from 'dotenv';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(__dirname, '../../../.env');
+console.log('[DEBUG] Loading .env from:', envPath);
+const dotenvResult = dotenv.config({ path: envPath });
+console.log('[DEBUG] dotenv error:', dotenvResult.error);
+console.log('[DEBUG] DATABASE_URL exists:', !!process.env.DATABASE_URL);
+
 import { OpenAiProvider } from '@svg-builder/ai-core';
 
 import { AssetTypeClassifierService } from './services/AssetTypeClassifierService.js';
@@ -32,8 +41,6 @@ import { registerSvgPackRoutes } from './routes/svgPacks.routes.js';
 import { SvgRepairAgentService } from './agents/SvgRepairAgentService.js';
 import { SvgGenerationWorkflowService } from './agents/SvgGenerationWorkflowService.js';
 import { prisma } from './db/prisma.js';
-
-dotenv.config();
 
 export async function buildApp() {
   const app = Fastify({
