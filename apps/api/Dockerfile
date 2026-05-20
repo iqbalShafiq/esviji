@@ -52,8 +52,8 @@ WORKDIR /app
 # Install pnpm and prisma CLI globally
 RUN npm install -g pnpm@9.0.0 prisma@5.14.0
 
-# Install wget for healthcheck
-RUN apk add --no-cache wget
+# Install runtime deps for healthcheck and Prisma engine
+RUN apk add --no-cache wget openssl libc6-compat
 
 ENV NODE_ENV=production
 ENV API_PORT=4000
