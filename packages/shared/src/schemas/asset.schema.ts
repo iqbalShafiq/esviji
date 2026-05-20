@@ -11,7 +11,7 @@ export const BuildSvgAssetRequestSchema = z.object({
     height: z.number().default(512),
   }),
   referenceImageUrl: z.string().optional(),
-  maxIterations: z.number().min(1).max(8).default(4),
+  maxIterations: z.number().min(1).max(15).optional(),
 });
 
 export const IterateSvgAssetRequestSchema = z.object({

@@ -4,6 +4,7 @@ import type {
   StyleSystem,
   LayoutBlueprint,
   EvaluationResult,
+  EvaluationIssue,
   RevisionPlan,
   BuildSvgAssetRequest,
   IterateSvgAssetRequest,
@@ -28,6 +29,7 @@ import { AssetTypeEvaluatorService } from '../services/AssetTypeEvaluatorService
 import { RevisionPlannerService } from '../services/RevisionPlannerService.js';
 import { StorageService } from '../services/StorageService.js';
 import { DebugOverlayService } from '../services/DebugOverlayService.js';
+import { IssueTracker } from '../services/IssueTracker.js';
 import { SvgGenerationWorkflowService } from '../agents/SvgGenerationWorkflowService.js';
 
 export class SvgBuildOrchestrator {
@@ -192,8 +194,23 @@ export class SvgBuildOrchestrator {
       let evaluation: EvaluationResult | undefined;
       let lastRevisionPlan: RevisionPlan | undefined;
       let lastValidationSummary: { valid: boolean; errors: string[]; warnings: string[] } | undefined;
+      
+      // Track issues across iterations to detect stale patterns
+      const issueTracker = new IssueTracker();
+      
+      // Track best iteration for fallback
+      let bestIteration = {
+        iteration: 1,
+        svg: '',
+        scores: {} as EvaluationResult['scores'],
+        issues: [] as EvaluationIssue[],
+        pngUrl: '',
+      };
 
-      for (let iteration = 1; iteration <= request.maxIterations; iteration++) {
+      // Soft limit: use request maxIterations or default to 15
+      const MAX_ITERATIONS = request.maxIterations ?? 15;
+
+      for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         logger.info({ assetId: asset.id, iteration }, `Starting iteration ${iteration}`);
 
         options?.onStage?.('svg', `Generating SVG iteration ${iteration}`, 50);
@@ -310,8 +327,35 @@ export class SvgBuildOrchestrator {
           data: { currentIteration: iteration },
         });
 
+        // Track issues and detect stale patterns
+        const issueAnalysis = issueTracker.trackIssues(evaluation.issues, iteration);
+        
+        // Update best iteration tracker
+        const currentScore = evaluation.scores.overall ?? 0;
+        const bestScore = bestIteration.scores.overall ?? 0;
+        const currentIssueCount = evaluation.issues.length;
+        const bestIssueCount = bestIteration.issues.length;
+        
+        // Update best if: higher score, OR same score with fewer issues
+        if (currentScore > bestScore || (currentScore === bestScore && currentIssueCount < bestIssueCount)) {
+          bestIteration = {
+            iteration,
+            svg: currentSvg,
+            scores: evaluation.scores,
+            issues: evaluation.issues,
+            pngUrl,
+          };
+        }
+
         logger.info(
-          { assetId: asset.id, iteration, continueIteration: evaluation.continueIteration },
+          { 
+            assetId: asset.id, 
+            iteration, 
+            continueIteration: evaluation.continueIteration,
+            newIssues: issueAnalysis.newIssues.length,
+            staleIssues: issueAnalysis.staleIssues.length,
+            resolvedIssues: issueAnalysis.resolvedIssues.length,
+          },
           'Iteration completed'
         );
 
@@ -321,25 +365,40 @@ export class SvgBuildOrchestrator {
           break;
         }
 
-        if (iteration < request.maxIterations) {
-          options?.onStage?.('revise', `Planning revision from iteration ${iteration}`, 80);
-          lastRevisionPlan = await this.revisionPlanner.plan(
-            currentLayout,
-            currentSvg,
-            evaluation.issues,
-            iteration,
-            classification,
-            {
-              onToken: (token) => options?.onLlmToken?.('revise', token),
-              onReasoning: (token) => options?.onReasoning?.('revise', token),
-              onRetry: (attempt, maxRetries, error) => reportRetry('revise', attempt, maxRetries, error),
-            }
-          );
+        // Check for forced stop conditions
+        const forceStop = issueTracker.shouldForceStop(iteration);
+        if (forceStop.shouldStop) {
+          logger.info({ assetId: asset.id, reason: forceStop.reason }, 'Forced stop detected');
+          options?.onStage?.('evaluate', `Stopping: ${forceStop.reason}. Using best iteration (#${bestIteration.iteration})`, 74);
+          
+          // Restore best iteration
+          currentSvg = bestIteration.svg;
+          evaluation = {
+            ...evaluation,
+            scores: bestIteration.scores,
+            issues: bestIteration.issues,
+            continueIteration: false,
+          };
+          break;
+        }
 
-          // Apply layout updates if revision plan includes them
-          if (lastRevisionPlan.updatedLayout && Object.keys(lastRevisionPlan.updatedLayout).length > 0) {
-            currentLayout = deepMerge(currentLayout, lastRevisionPlan.updatedLayout) as LayoutBlueprint;
+        options?.onStage?.('revise', `Planning revision from iteration ${iteration}`, 80);
+        lastRevisionPlan = await this.revisionPlanner.plan(
+          currentLayout,
+          currentSvg,
+          evaluation.issues,
+          iteration,
+          classification,
+          {
+            onToken: (token) => options?.onLlmToken?.('revise', token),
+            onReasoning: (token) => options?.onReasoning?.('revise', token),
+            onRetry: (attempt, maxRetries, error) => reportRetry('revise', attempt, maxRetries, error),
           }
+        );
+
+        // Apply layout updates if revision plan includes them
+        if (lastRevisionPlan.updatedLayout && Object.keys(lastRevisionPlan.updatedLayout).length > 0) {
+          currentLayout = deepMerge(currentLayout, lastRevisionPlan.updatedLayout) as LayoutBlueprint;
         }
       }
 

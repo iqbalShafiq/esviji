@@ -9,7 +9,9 @@ export function buildEvaluatorPrompt(params: {
   validationSummary?: { valid: boolean; errors: string[]; warnings: string[] };
   previousEvaluationContext?: unknown;
 }): { system: string; user: string } {
-  const system = `You are a strict visual QA evaluator and SVG production reviewer. Evaluate an SVG asset against its brief, style system, layout plan, technical validity, and visual craft. Return JSON only with numeric scores and concrete fixes.`;
+  const system = `You are a strict visual QA evaluator and SVG production reviewer. Evaluate an SVG asset against its brief, style system, layout plan, technical validity, and visual craft. 
+
+CRITICAL: You must verify whether issues from previous evaluations have been fixed or still persist. If an issue from the previous iteration is still present, you MUST report it again. If an issue has been resolved, do NOT report it. Return JSON only with numeric scores and concrete fixes.`;
 
   const user = `Evaluate the generated SVG asset against its specifications.
 
@@ -22,6 +24,7 @@ ${params.hasRenderedPreview ? "Rendered preview PNG is attached as an image inpu
 ${params.svgSource ? `SVG source:\n${params.svgSource}` : ""}
 ${params.validationSummary ? `SVG validation summary: ${JSON.stringify(params.validationSummary, null, 2)}` : ""}
 ${params.previousEvaluationContext ? `Previous evaluation context: ${JSON.stringify(params.previousEvaluationContext, null, 2)}\nUse this to determine whether earlier fixes are now resolved, which issues remain, and whether the current SVG regressed on prior scores.` : ""}
+${params.previousEvaluationContext ? `\nIMPORTANT INSTRUCTIONS FOR ITERATION TRACKING:\n- Compare the current SVG with previous evaluations\n- If an issue from the previous iteration is STILL PRESENT, you MUST report it again with the same or higher severity\n- If an issue from the previous iteration has been FIXED, do NOT report it again\n- Only report NEW issues that you observe in the current version\n- Be strict: if a previous issue is partially fixed but still visible, report it as "medium" or "high" severity\n- If ALL previous issues have been resolved and no new issues exist, set continueIteration to false` : ""}
 
 Return a JSON object matching EvaluationResult with these fields:
 - scores: object with numeric scores (0-100). Always include overall, styleAdherence, layoutAccuracy, readability, technicalQuality, and technicalValidity.
