@@ -189,7 +189,7 @@ export class SvgBuildOrchestrator {
       });
       options?.onStage?.(
         'style',
-        `Style system: ${styleSystem.name} with ${Object.keys(styleSystem.palette).length} palette roles`,
+        describeStyleSystem(styleSystem),
         34
       );
 
@@ -689,7 +689,7 @@ export class SvgBuildOrchestrator {
           return { packContextPrompt: undefined };
         }
 
-        options.onStage?.('brief', 'Preparing pack consistency context', 8);
+        options.onStage?.('brief', 'Preparing pack consistency context', 18);
         return {
           packContextPrompt: options.packConsistencyContext,
         };
@@ -764,7 +764,7 @@ export class SvgBuildOrchestrator {
         });
         options?.onStage?.(
           'style',
-          `Style system: ${styleSystem.name} with ${Object.keys(styleSystem.palette).length} palette roles`,
+          describeStyleSystem(styleSystem),
           34
         );
         return { styleSystem };
@@ -1045,9 +1045,9 @@ export class SvgBuildOrchestrator {
         logger.info({ assetId: asset.id }, 'Pipeline completed successfully');
         return { finalAsset: updatedAsset };
       })
-      .addEdge(START, 'pack_context')
-      .addEdge('pack_context', 'classify')
-      .addEdge('classify', 'reference_analyze')
+      .addEdge(START, 'classify')
+      .addEdge('classify', 'pack_context')
+      .addEdge('pack_context', 'reference_analyze')
       .addEdge('reference_analyze', 'build_brief')
       .addEdge('build_brief', 'style')
       .addEdge('style', 'plan_layout')
@@ -1283,6 +1283,15 @@ Pack consistency context:
 ${packConsistencyContext.trim()}
 
 Use this context as a hard visual system. Keep the new SVG consistent with the pack while making this asset's metaphor distinct and readable.`;
+}
+
+function describeStyleSystem(styleSystem: StyleSystem): string {
+  const palette = readRecord(styleSystem.palette);
+  const paletteCount = palette ? Object.keys(palette).length : 0;
+  const name = typeof styleSystem.name === 'string' && styleSystem.name.trim()
+    ? styleSystem.name
+    : 'Shared pack style';
+  return `Style system: ${name} with ${paletteCount} palette roles`;
 }
 
 function deepMerge(base: unknown, patch: unknown): unknown {

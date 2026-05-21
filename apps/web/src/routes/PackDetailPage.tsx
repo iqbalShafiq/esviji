@@ -10,13 +10,13 @@ import { PreviewCanvas } from "../components/builder/PreviewCanvas.js";
 import { PreviewToolbar } from "../components/builder/PreviewToolbar.js";
 import { PreviewWorkspace } from "../components/builder/PreviewWorkspace.js";
 import { PipelineRail } from "../components/builder/PipelineRail.js";
+import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { ScoresCard } from "../components/builder/ScoresCard.js";
 import { QualityGates } from "../components/builder/QualityGates.js";
 import { IterationTimeline } from "../components/builder/IterationTimeline.js";
 import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
-import { JsonInspector } from "../components/builder/JsonInspector.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { getAsset, getPack, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
 import type { AssetResponse, BackgroundMode, JobResponse, PreviewMode, PreviewSize } from "../types/index.js";
@@ -43,6 +43,7 @@ export default function PackDetailPage() {
   const outlierIds = useMemo(() => pack?.outliers?.map((o) => o.assetId) ?? [], [pack?.outliers]);
   const activeAsset = selectedAsset ?? pack?.assets[0];
   const showingPreview = Boolean(selectedAsset || isLoading || job);
+  const isGenerating = isLoading || job?.status === "queued" || job?.status === "running";
 
   useEffect(() => {
     setSelectedAsset(undefined);
@@ -224,7 +225,19 @@ export default function PackDetailPage() {
         }
         rightPanel={
           <div className="flex h-full flex-col gap-4 overflow-y-auto p-4" style={{ background: "var(--surface)" }}>
-            {activeAsset && showingPreview && (
+            {job && isGenerating && (
+              <PipelineFlowLogs
+                logs={job.logs}
+                currentStage={job.currentStage}
+                failed={job.status === "failed"}
+                stageStreams={job.stageStreams}
+                stageReasoningStreams={job.stageReasoningStreams}
+                streamEvents={job.streamEvents}
+                error={job.error}
+              />
+            )}
+            {!isGenerating && <PackConsistencyPanel pack={pack} />}
+            {activeAsset && showingPreview && !isGenerating && (
               <>
                 <ExportButtons assetId={activeAsset.id} svg={activeAsset.finalSvg} pngUrl={activeAsset.finalPngUrl} />
                 {activeAsset.finalSvg && <SvgCodeEditor svg={activeAsset.finalSvg} />}
@@ -234,21 +247,17 @@ export default function PackDetailPage() {
                 <IssuesPanel issues={activeAsset.evaluation?.issues} iterationLabel="latest/final iteration" />
               </>
             )}
-            {hasPipelineData(job) && (
-              <JsonInspector
-                title="Pipeline Stream"
-                data={{
-                  currentStage: job.currentStage,
-                  progress: job.progress,
-                  logs: job.logs,
-                  stageStreams: job.stageStreams,
-                  stageReasoningStreams: job.stageReasoningStreams,
-                  streamEvents: job.streamEvents,
-                  error: job.error,
-                }}
+            {hasPipelineData(job) && !isGenerating && (
+              <PipelineFlowLogs
+                logs={job.logs}
+                currentStage={job.currentStage}
+                failed={job.status === "failed"}
+                stageStreams={job.stageStreams}
+                stageReasoningStreams={job.stageReasoningStreams}
+                streamEvents={job.streamEvents}
+                error={job.error}
               />
             )}
-            <PackConsistencyPanel pack={pack} />
           </div>
         }
       />

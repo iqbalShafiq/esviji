@@ -44,12 +44,9 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
 
   if (!pack) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center gap-2 p-4">
-        <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
-          Pack Inspector
-        </p>
+      <div className="p-4 border" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
         <p className="text-xs font-mono" style={{ color: "var(--muted)" }}>
-          Generate a pack to see consistency details
+          No pack consistency details available
         </p>
       </div>
     );
@@ -61,16 +58,16 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
 
   return (
     <div
-      className="flex flex-col gap-5 p-5 h-full overflow-y-auto"
-      style={{ background: "var(--surface)" }}
+      className="p-4 border flex flex-col gap-3"
+      style={{ borderColor: "var(--line)", background: "var(--surface)" }}
     >
       <div className="flex items-center justify-between">
-        <h2
-          className="text-sm font-semibold uppercase tracking-wider"
-          style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
+        <h3
+          className="text-xs font-semibold uppercase tracking-wider"
+          style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}
         >
           Pack Inspector
-        </h2>
+        </h3>
         <span
           className="text-[10px] font-mono px-2 py-0.5 border"
           style={{
@@ -85,19 +82,19 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
 
       {/* Consistency Score */}
       <div
-        className="flex flex-col items-center gap-2 p-4 border"
+        className="flex items-center justify-between"
         style={{
-          borderColor: "var(--line)",background: "var(--bg)",
+          background: "var(--surface)",
         }}
       >
         <span
-          className="text-xs font-medium uppercase tracking-wider"
+          className="text-xs font-medium"
           style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
         >
           Consistency Score
         </span>
         <span
-          className="text-4xl font-bold"
+          className="text-lg font-bold tabular-nums"
           style={{
             color:
               overall >= 85
@@ -105,7 +102,7 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
                 : overall >= 60
                 ? "var(--amber)"
                 : "var(--red)",
-            fontFamily: "var(--font-display)",
+            fontFamily: "var(--font-mono)",
           }}
         >
           {overall > 0 ? Math.round(overall) : "—"}
@@ -114,12 +111,6 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
 
       {/* Consistency Strip */}
       <div className="flex flex-col gap-3">
-        <h3
-          className="text-xs font-semibold uppercase tracking-wider"
-          style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
-        >
-          Consistency Metrics
-        </h3>
         <ConsistencyBar label="Style" score={scores.styleConsistency} />
         <ConsistencyBar label="Stroke" score={scores.strokeConsistency} />
         <ConsistencyBar label="Palette" score={scores.paletteConsistency} />
@@ -129,7 +120,7 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
 
       {/* Shared Style System */}
       {pack.sharedStyleSystem && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 border-t pt-3" style={{ borderColor: "var(--line)" }}>
           <button
             type="button"
             onClick={() => setShowStyleSystem((s) => !s)}
@@ -168,7 +159,7 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
 
       {/* Outliers */}
       {outliers.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 border-t pt-3" style={{ borderColor: "var(--line)" }}>
           <h3
             className="text-xs font-semibold uppercase tracking-wider"
             style={{ color: "var(--amber)", fontFamily: "var(--font-mono)" }}

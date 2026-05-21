@@ -1,4 +1,4 @@
-import type { BuildSvgPackAssetRequest, BuildSvgPackRequest, CreativeBrief, EvaluationResult, StyleSystem } from '@svg-builder/shared';
+import { StyleSystemSchema, type BuildSvgPackAssetRequest, type BuildSvgPackRequest, type CreativeBrief, type EvaluationResult, type StyleSystem } from '@svg-builder/shared';
 import type { AssetPack, Asset, AssetIteration, PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { logger } from '../utils/logger.js';
@@ -469,7 +469,8 @@ export class SvgPackBuildOrchestrator {
 
   private readPackStyleSystem(pack: AssetPack): StyleSystem | undefined {
     if (!pack.styleSystem || pack.styleSystem === Prisma.JsonNull) return undefined;
-    return pack.styleSystem as unknown as StyleSystem;
+    const parseResult = StyleSystemSchema.safeParse(pack.styleSystem);
+    return parseResult.success ? parseResult.data : undefined;
   }
 
   private readLatestAssetStyleSystem(
@@ -477,7 +478,8 @@ export class SvgPackBuildOrchestrator {
   ): StyleSystem | undefined {
     for (const asset of assets) {
       const styleSystem = asset.iterations?.[0]?.styleSystem;
-      if (styleSystem) return styleSystem as unknown as StyleSystem;
+      const parseResult = StyleSystemSchema.safeParse(styleSystem);
+      if (parseResult.success) return parseResult.data;
     }
     return undefined;
   }

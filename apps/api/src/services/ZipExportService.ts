@@ -1,4 +1,5 @@
 import { createWriteStream } from 'fs';
+import type { WriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
 import path from 'path';
 import { createRequire } from 'module';
@@ -7,7 +8,24 @@ import type { StorageService } from './StorageService.js';
 import { logger } from '../utils/logger.js';
 
 const require = createRequire(import.meta.url);
-const archiver = require('archiver');
+const archiverModule = require('archiver') as ArchiverModule;
+
+type ZipArchiveOptions = { zlib: { level: number } };
+type ArchiveInstance = {
+  pointer(): number;
+  on(event: 'error' | 'warning', listener: (error: Error) => void): ArchiveInstance;
+  pipe(output: WriteStream): void;
+  file(source: string, data: { name: string }): void;
+  append(source: string | Buffer, data: { name: string }): void;
+  finalize(): void;
+};
+type LegacyArchiverFactory = (format: 'zip', options: ZipArchiveOptions) => ArchiveInstance;
+type ArchiverModule =
+  | LegacyArchiverFactory
+  | {
+      default?: LegacyArchiverFactory;
+      ZipArchive?: new (options: ZipArchiveOptions) => ArchiveInstance;
+    };
 
 export class ZipExportService {
   constructor(private storageService: StorageService) {}
@@ -23,7 +41,7 @@ export class ZipExportService {
 
     const zipPath = path.join(packDir, 'pack.zip');
     const output = createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = createZipArchive({ zlib: { level: 9 } });
 
     return new Promise((resolve, reject) => {
       output.on('close', () => {
@@ -85,4 +103,20 @@ export class ZipExportService {
       archive.finalize();
     });
   }
+}
+
+function createZipArchive(options: ZipArchiveOptions): ArchiveInstance {
+  if (typeof archiverModule === 'function') {
+    return archiverModule('zip', options);
+  }
+
+  if (typeof archiverModule.default === 'function') {
+    return archiverModule.default('zip', options);
+  }
+
+  if (archiverModule.ZipArchive) {
+    return new archiverModule.ZipArchive(options);
+  }
+
+  throw new Error('Unsupported archiver module shape');
 }

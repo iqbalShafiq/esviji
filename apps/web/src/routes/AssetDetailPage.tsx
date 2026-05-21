@@ -14,7 +14,6 @@ import { IterationTimeline } from "../components/builder/IterationTimeline.js";
 import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
-import { JsonInspector } from "../components/builder/JsonInspector.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
@@ -178,7 +177,6 @@ export default function AssetDetailPage() {
                   issues={asset.evaluation?.issues}
                   iterationLabel="latest/final iteration"
                 />
-                <JsonInspector data={asset} title="Raw Response" />
               </>
             )}
             {isLoading && (
