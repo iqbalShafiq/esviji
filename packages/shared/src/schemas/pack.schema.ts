@@ -14,4 +14,20 @@ export const BuildSvgPackRequestSchema = z.object({
   maxIterations: z.number().min(1).max(8).default(3),
 });
 
+export const BuildSvgPackAssetRequestSchema = z.object({
+  prompt: z.string().min(1),
+  name: z.string().optional(),
+  assetType: z.string().optional(),
+  mode: z.enum(["direct", "reference", "premium"]).default("direct"),
+  style: z.string().optional(),
+  output: z.object({
+    formats: z.array(z.enum(["svg", "png"])).default(["svg", "png"]),
+    width: z.number().default(512),
+    height: z.number().default(512),
+  }),
+  referenceImageUrl: z.string().optional(),
+  maxIterations: z.number().min(1).max(15).optional(),
+});
+
 export type BuildSvgPackRequest = z.infer<typeof BuildSvgPackRequestSchema>;
+export type BuildSvgPackAssetRequest = z.infer<typeof BuildSvgPackAssetRequestSchema>;

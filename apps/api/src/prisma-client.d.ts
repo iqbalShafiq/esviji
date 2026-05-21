@@ -100,16 +100,26 @@ declare module '@prisma/client' {
       include?: {
         assets?:
           | boolean
-          | { select?: Partial<Record<keyof Asset, boolean>>; include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' } } } };
+          | {
+              orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
+              take?: number;
+              select?: Partial<Record<keyof Asset, boolean>>;
+              include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number } };
+            };
       };
     }): Promise<(AssetPack & { assets: (Asset & { iterations?: AssetIteration[] })[] }) | null>;
     findMany(args?: {
       orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
       include?: {
-        assets?: boolean | { select?: Partial<Record<keyof Asset, boolean>> };
+        _count?: { select?: { assets?: boolean } };
+        assets?: boolean | {
+          orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
+          take?: number;
+          select?: Partial<Record<keyof Asset, boolean>>;
+        };
       };
-    }): Promise<(AssetPack & { assets: Asset[] })[]>;
-    update(args: { where: { id: string }; data: Partial<AssetPack> }): Promise<AssetPack>;
+    }): Promise<(AssetPack & { assets: Asset[]; _count?: { assets: number } })[]>;
+    update(args: { where: { id: string }; data: Partial<Omit<AssetPack, 'quantity'>> & { quantity?: number | { increment: number } } }): Promise<AssetPack>;
   }
 
   interface AssetIterationDelegate {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ASSET_TYPES } from "@svg-builder/shared";
 import type { BuildSvgAssetRequest } from "@svg-builder/shared";
@@ -89,14 +89,15 @@ const MODE_OPTIONS = [
   },
 ];
 
+const ASSET_BUILDER_DRAFT_KEY = "vectorlab.assetBuilderDraft.v1";
+
 export function AssetBuilderForm({
   onJobCreated,
   onSubmitStart,
   onBuildError,
   isSubmitting = false,
 }: AssetBuilderFormProps) {
-  const [preset, setPreset] = useState<QualityPreset>("balanced");
-  const [form, setForm] = useState<BuildSvgAssetRequest>({
+  const [form, setForm] = useState<BuildSvgAssetRequest>(() => readDraft()?.form ?? {
     prompt: "",
     assetType: undefined,
     mode: "direct",
@@ -109,6 +110,7 @@ export function AssetBuilderForm({
     referenceImageUrl: "",
     maxIterations: PRESET_CONFIG.balanced.maxIterations,
   });
+  const [preset, setPreset] = useState<QualityPreset>(() => readDraft()?.preset ?? "balanced");
 
   const mutation = useMutation({
     mutationFn: buildSvgAsset,
@@ -154,6 +156,13 @@ export function AssetBuilderForm({
 
   const currentStage: string | undefined = undefined;
   const isLoading = mutation.isPending || isSubmitting;
+
+  useEffect(() => {
+    sessionStorage.setItem(
+      ASSET_BUILDER_DRAFT_KEY,
+      JSON.stringify({ form, preset }),
+    );
+  }, [form, preset]);
 
   return (
     <form
@@ -410,4 +419,14 @@ function getAssetTypeTone(type: string): "default" | "blueprint" | "cyan" | "amb
     return "blueprint";
   }
   return "default";
+}
+
+function readDraft(): { form: BuildSvgAssetRequest; preset: QualityPreset } | undefined {
+  try {
+    const raw = sessionStorage.getItem(ASSET_BUILDER_DRAFT_KEY);
+    if (!raw) return undefined;
+    return JSON.parse(raw) as { form: BuildSvgAssetRequest; preset: QualityPreset };
+  } catch {
+    return undefined;
+  }
 }

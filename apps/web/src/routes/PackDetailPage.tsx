@@ -1,235 +1,359 @@
-import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../components/layout/AppShell.js";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { AssetGrid } from "../components/builder/AssetGrid.js";
+import { PackAssetBuilderForm } from "../components/builder/PackAssetBuilderForm.js";
 import { PackConsistencyPanel } from "../components/builder/PackConsistencyPanel.js";
-import { getPack } from "../lib/api.js";
-import type { AssetResponse } from "../types/index.js";
+import { PreviewCanvas } from "../components/builder/PreviewCanvas.js";
+import { PreviewToolbar } from "../components/builder/PreviewToolbar.js";
+import { PreviewWorkspace } from "../components/builder/PreviewWorkspace.js";
+import { PipelineRail } from "../components/builder/PipelineRail.js";
+import { ExportButtons } from "../components/builder/ExportButtons.js";
+import { ScoresCard } from "../components/builder/ScoresCard.js";
+import { QualityGates } from "../components/builder/QualityGates.js";
+import { IterationTimeline } from "../components/builder/IterationTimeline.js";
+import { IssuesPanel } from "../components/builder/IssuesPanel.js";
+import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
+import { JsonInspector } from "../components/builder/JsonInspector.js";
+import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
+import { getAsset, getPack, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
+import type { AssetResponse, BackgroundMode, JobResponse, PreviewMode, PreviewSize } from "../types/index.js";
 
 export default function PackDetailPage() {
   const { packId } = useParams<{ packId: string }>();
+  const queryClient = useQueryClient();
+  const [selectedAsset, setSelectedAsset] = useState<AssetResponse | undefined>();
+  const [jobId, setJobId] = useState<string | undefined>();
+  const [job, setJob] = useState<JobResponse | undefined>();
+  const [mode, setMode] = useState<PreviewMode>("final");
+  const [background, setBackground] = useState<BackgroundMode>("transparent");
+  const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
+  const [isLoadingAssetDetail, setIsLoadingAssetDetail] = useState(false);
 
-  const { data: pack, isLoading, error } = useQuery({
+  const { data: pack, isLoading: isPackLoading, error, refetch } = useQuery({
     queryKey: ["pack", packId],
     queryFn: () => getPack(packId!),
     enabled: !!packId,
   });
 
-  const handleRefine = (asset: AssetResponse) => {
-    // Navigate to asset detail — the AssetCard refine button navigates,
-    // but in detail page we may want a different behavior.
-    // For now, we'll open the asset in a new tab or navigate.
-    window.open(`/assets/${asset.id}`, "_blank");
+  const outlierIds = useMemo(() => pack?.outliers?.map((o) => o.assetId) ?? [], [pack?.outliers]);
+  const activeAsset = selectedAsset ?? pack?.assets[0];
+  const showingPreview = Boolean(selectedAsset || isLoading || job);
+
+  useEffect(() => {
+    setSelectedAsset(undefined);
+    setJob(undefined);
+    setJobId(undefined);
+    setIsLoading(false);
+  }, [packId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    const unsubscribe = subscribeJobStream(jobId, {
+      onJob: async (incomingJob) => {
+        setJob(incomingJob);
+
+        if (incomingJob.status === "completed") {
+          const nextPack = await refetch();
+          if (incomingJob.assetId) {
+            const asset = await getAsset(incomingJob.assetId);
+            setSelectedAsset(asset);
+          } else {
+            setSelectedAsset(nextPack.data?.assets[0]);
+          }
+          await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+          setIsLoading(false);
+        }
+
+        if (incomingJob.status === "failed") {
+          setIsLoading(false);
+        }
+      },
+      onError: () => setIsLoading(false),
+      onModelToken: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, "stageStreams", stage, content));
+      },
+      onReasoning: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, "stageReasoningStreams", stage, content));
+      },
+      onTool: (event) => {
+        setJob((current) => appendJobToolEvent(current, event));
+      },
+      onClearStream: ({ stage }) => {
+        setJob((current) => clearJobStream(current, stage));
+      },
+    });
+
+    return () => unsubscribe();
+  }, [jobId, queryClient, refetch]);
+
+  const handleManualRefine = async (instruction: string) => {
+    if (!activeAsset) return;
+    setIsRefining(true);
+    try {
+      const updated = await iterateSvgAsset({ assetId: activeAsset.id, instruction });
+      setSelectedAsset(updated);
+      await refetch();
+    } finally {
+      setIsRefining(false);
+    }
   };
 
-  const outlierIds = pack?.outliers?.map((o) => o.assetId) || [];
+  const handleSelectAsset = async (asset: AssetResponse) => {
+    if (asset.finalSvg) {
+      setSelectedAsset(asset);
+      return;
+    }
+
+    setIsLoadingAssetDetail(true);
+    try {
+      const fullAsset = await getAsset(asset.id);
+      setSelectedAsset(fullAsset);
+    } finally {
+      setIsLoadingAssetDetail(false);
+    }
+  };
 
   return (
-    <StudioFrame>
+    <StudioFrame
+      topBarActions={
+        <Link to="/packs" className="px-3 py-2 text-xs font-semibold transition-colors" style={{ background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line)" }}>
+          My Packs
+        </Link>
+      }
+    >
       <AppShell
         leftPanel={
-          <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
+          <div className="h-full">
             {pack && (
-              <>
-                <div
-                  className="p-4 border flex flex-col gap-3"
-                  style={{
-                    borderColor: "var(--line)",
-                    background: "var(--surface)",}}
-                >
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to="/packs/new"
-                      className="text-xs font-medium hover:underline"
-                      style={{ color: "var(--blueprint)" }}
-                    >
-                      &larr; New Pack
-                    </Link>
-                  </div>
-                  <h2
-                    className="text-sm font-semibold"
-                    style={{ color: "var(--ink)", fontFamily: "var(--font-display)" }}
-                  >
-                    {pack.prompt}
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    <span
-                      className="text-[10px] font-mono px-2 py-1 border"
-                      style={{
-                        borderColor: "var(--line)",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                      }}
-                    >
-                      {pack.assetType}
-                    </span>
-                    <span
-                      className="text-[10px] font-mono px-2 py-1 border"
-                      style={{
-                        borderColor: "var(--line)",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                      }}
-                    >
-                      {pack.quantity} items
-                    </span>
-                    <span
-                      className="text-[10px] font-mono px-2 py-1 border"
-                      style={{
-                        borderColor: "var(--line)",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                      }}
-                    >
-                      {pack.output?.width ?? 48}&times;{pack.output?.height ?? 48}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Outlier Report */}
-                {pack.outliers && pack.outliers.length > 0 && (
-                  <div
-                    className="p-4 border flex flex-col gap-3"
-                    style={{
-                      borderColor: "var(--amber)",
-                      background: "var(--surface)",}}
-                  >
-                    <h3
-                      className="text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: "var(--amber)", fontFamily: "var(--font-mono)" }}
-                    >
-                      Outlier Report
-                    </h3>
-                    <div className="flex flex-col gap-2">
-                      {pack.outliers.map((o, i) => (
-                        <div
-                          key={`${o.assetId}-${i}`}
-                          className="flex flex-col gap-1"
-                        >
-                          <span
-                            className="text-xs font-medium"
-                            style={{ color: "var(--ink)" }}
-                          >
-                            {o.name}
-                          </span>
-                          <span
-                            className="text-[10px]"
-                            style={{ color: "var(--red)" }}
-                          >
-                            {o.problem}
-                          </span>
-                          {o.suggestedFix && (
-                            <span
-                              className="text-[10px] font-mono"
-                              style={{ color: "var(--muted)" }}
-                            >
-                              Fix: {o.suggestedFix}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Consistency Scores */}
-                {pack.consistencyScores && (
-                  <div
-                    className="p-4 border flex flex-col gap-3"
-                    style={{
-                      borderColor: "var(--line)",
-                      background: "var(--surface)",}}
-                  >
-                    <h3
-                      className="text-xs font-semibold uppercase tracking-wider"
-                      style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
-                    >
-                      Consistency Scores
-                    </h3>
-                    <pre
-                      className="text-[10px] font-mono p-2 border overflow-auto"
-                      style={{
-                        background: "var(--bg)",
-                        borderColor: "var(--line)",color: "var(--ink)",
-                      }}
-                    >
-                      {JSON.stringify(pack.consistencyScores, null, 2)}
-                    </pre>
-                  </div>
-                )}
-              </>
+              <PackAssetBuilderForm
+                pack={pack}
+                isSubmitting={isLoading}
+                onSubmitStart={() => setIsLoading(true)}
+                onBuildError={() => setIsLoading(false)}
+                onJobCreated={(id) => {
+                  setJobId(id);
+                  setJob(undefined);
+                  setSelectedAsset(undefined);
+                }}
+              />
             )}
-
-            {isLoading && (
-              <div className="flex flex-col gap-3">
-                <div
-                  className="h-20 animate-pulse"
-                  style={{ background: "var(--surface-2)" }}
-                />
-                <div
-                  className="h-40 animate-pulse"
-                  style={{ background: "var(--surface-2)" }}
-                />
-              </div>
-            )}
-
-            {error && !pack && (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-2">
-                <p className="text-sm font-medium" style={{ color: "var(--red)" }}>
-                  Failed to load pack
-                </p>
-                <p className="text-xs font-mono" style={{ color: "var(--muted)" }}>
-                  {error instanceof Error ? error.message : "Unknown error"}
-                </p>
-              </div>
-            )}
-
-            {!pack && !isLoading && !error && (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-2">
-                <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
-                  Pack not found
-                </p>
-              </div>
-            )}
+            {isPackLoading && <PackSkeleton />}
+            {error && !pack && <PackLoadError error={error} />}
           </div>
         }
         centerPanel={
-          <div className="h-full flex flex-col">
-            {pack && (
-              <div
-                className="flex items-center justify-between px-4 py-3 border-b shrink-0"
-                style={{ borderColor: "var(--line)" }}
-              >
-                <h2
-                  className="text-sm font-semibold"
-                  style={{ color: "var(--ink)", fontFamily: "var(--font-display)" }}
-                >
-                  Assets
-                </h2>
-                <span
-                  className="text-xs font-mono"
-                  style={{ color: "var(--muted)" }}
-                >
-                  {pack.assets?.length ?? 0} items
+          showingPreview ? (
+            <div className="flex h-full flex-col">
+              {isLoading && pack && (
+                <PackAssetStrip
+                  assets={pack.assets}
+                  selectedAssetId={activeAsset?.id}
+                  onSelect={handleSelectAsset}
+                />
+              )}
+              <div className="min-h-0 flex-1">
+                <PreviewWorkspace
+                  pipelineRail={<PipelineRail asset={activeAsset} currentStage={job?.currentStage} failed={job?.status === "failed"} />}
+                  canvas={
+                  <PreviewCanvas
+                      asset={activeAsset}
+                      mode={mode}
+                      background={background}
+                      previewSize={previewSize}
+                      isLoading={isLoading || isPackLoading || isLoadingAssetDetail}
+                      isRefining={isRefining}
+                      currentStage={job?.currentStage}
+                      loadingPreviewUrl={job?.latestPreviewUrl}
+                      loadingIteration={job?.latestIteration}
+                      loadingProgress={job?.progress}
+                    />
+                  }
+                  toolbar={
+                    <PreviewToolbar
+                      mode={mode}
+                      onModeChange={setMode}
+                      background={background}
+                      onBackgroundChange={setBackground}
+                      previewSize={previewSize}
+                      onPreviewSizeChange={setPreviewSize}
+                    />
+                  }
+                  refinementPrompt={
+                    activeAsset ? (
+                      <ManualRefinementPrompt
+                        disabled={isLoading || isRefining}
+                        isLoading={isRefining}
+                        onSubmit={handleManualRefine}
+                      />
+                    ) : undefined
+                  }
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full flex-col">
+              <div className="flex shrink-0 items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--line)" }}>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold" style={{ color: "var(--ink)", fontFamily: "var(--font-display)" }}>
+                    {pack?.prompt ?? "Assets"}
+                  </h2>
+                  <p className="mt-0.5 text-[10px] font-mono" style={{ color: "var(--muted)" }}>
+                    Click an SVG to inspect or refine it
+                  </p>
+                </div>
+                <span className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                  {pack?.assets.length ?? 0} items
                 </span>
               </div>
-            )}
-            <div className="flex-1 min-h-0">
-              <AssetGrid
-                assets={pack?.assets || []}
-                outlierIds={outlierIds}
-                onRefine={handleRefine}
-              />
+              <div className="min-h-0 flex-1">
+                <AssetGrid
+                  assets={pack?.assets ?? []}
+                  outlierIds={outlierIds}
+                  emptyMessage="Add a SVG from the left command panel"
+                  onRefine={handleSelectAsset}
+                />
+              </div>
             </div>
-          </div>
+          )
         }
         rightPanel={
-          <div className="h-full">
+          <div className="flex h-full flex-col gap-4 overflow-y-auto p-4" style={{ background: "var(--surface)" }}>
+            {activeAsset && showingPreview && (
+              <>
+                <ExportButtons assetId={activeAsset.id} svg={activeAsset.finalSvg} pngUrl={activeAsset.finalPngUrl} />
+                {activeAsset.finalSvg && <SvgCodeEditor svg={activeAsset.finalSvg} />}
+                <ScoresCard scores={activeAsset.evaluation?.scores} />
+                {activeAsset.qualityGates && activeAsset.qualityGates.length > 0 && <QualityGates gates={activeAsset.qualityGates} />}
+                <IterationTimeline iterations={activeAsset.iterations} />
+                <IssuesPanel issues={activeAsset.evaluation?.issues} iterationLabel="latest/final iteration" />
+              </>
+            )}
+            {hasPipelineData(job) && (
+              <JsonInspector
+                title="Pipeline Stream"
+                data={{
+                  currentStage: job.currentStage,
+                  progress: job.progress,
+                  logs: job.logs,
+                  stageStreams: job.stageStreams,
+                  stageReasoningStreams: job.stageReasoningStreams,
+                  streamEvents: job.streamEvents,
+                  error: job.error,
+                }}
+              />
+            )}
             <PackConsistencyPanel pack={pack} />
           </div>
         }
       />
     </StudioFrame>
+  );
+}
+
+function PackAssetStrip({
+  assets,
+  selectedAssetId,
+  onSelect,
+}: {
+  assets: AssetResponse[];
+  selectedAssetId?: string;
+  onSelect: (asset: AssetResponse) => void;
+}) {
+  return (
+    <div className="flex shrink-0 gap-2 overflow-x-auto border-b p-3" style={{ borderColor: "var(--line)", background: "var(--surface)" }}>
+      {assets.map((asset) => (
+        <button
+          key={asset.id}
+          type="button"
+          className="flex h-16 w-16 shrink-0 items-center justify-center border transition-all"
+          style={{
+            borderColor: selectedAssetId === asset.id ? "var(--blueprint)" : "var(--line)",
+            background: "var(--bg)",
+          }}
+          onClick={() => onSelect(asset)}
+          title={asset.prompt}
+        >
+          {asset.finalPngUrl ? (
+            <img src={asset.finalPngUrl} alt={asset.prompt} className="h-10 w-10 object-contain" />
+          ) : (
+            <span className="h-5 w-5 animate-pulse" style={{ background: "var(--line)" }} />
+          )}
+        </button>
+      ))}
+      <div className="flex h-16 min-w-32 items-center justify-center border border-dashed px-3 text-[10px] font-mono" style={{ borderColor: "var(--line)", color: "var(--muted)" }}>
+        Generating next SVG
+      </div>
+    </div>
+  );
+}
+
+function PackSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <div className="h-24 animate-pulse" style={{ background: "var(--surface-2)" }} />
+      <div className="h-48 animate-pulse" style={{ background: "var(--surface-2)" }} />
+    </div>
+  );
+}
+
+function PackLoadError({ error }: { error: unknown }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+      <p className="text-sm font-semibold" style={{ color: "var(--red)" }}>
+        Failed to load pack
+      </p>
+      <p className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+        {error instanceof Error ? error.message : "Unknown error"}
+      </p>
+    </div>
+  );
+}
+
+function clearJobStream(job: JobResponse | undefined, stage: string): JobResponse | undefined {
+  if (!job) return job;
+  return {
+    ...job,
+    stageStreams: { ...(job.stageStreams ?? {}), [stage]: "" },
+    stageReasoningStreams: { ...(job.stageReasoningStreams ?? {}), [stage]: "" },
+  };
+}
+
+function appendJobStream(
+  job: JobResponse | undefined,
+  key: "stageStreams" | "stageReasoningStreams",
+  stage: string,
+  content: string,
+): JobResponse | undefined {
+  if (!job) return job;
+  const streams = job[key] ?? {};
+  return {
+    ...job,
+    [key]: { ...streams, [stage]: `${streams[stage] ?? ""}${content}` },
+  };
+}
+
+function appendJobToolEvent(
+  job: JobResponse | undefined,
+  event: NonNullable<JobResponse["streamEvents"]>[number],
+): JobResponse | undefined {
+  if (!job) return job;
+  const streamEvents = job.streamEvents ?? [];
+  if (streamEvents.some((item) => item.sequence === event.sequence)) return job;
+  return { ...job, streamEvents: [...streamEvents, event] };
+}
+
+function hasPipelineData(job: JobResponse | undefined): job is JobResponse {
+  if (!job) return false;
+  return (
+    job.logs.length > 0 ||
+    Object.keys(job.stageStreams ?? {}).length > 0 ||
+    Object.keys(job.stageReasoningStreams ?? {}).length > 0 ||
+    (job.streamEvents ?? []).some((event) => event.type === "tool")
   );
 }

@@ -89,8 +89,19 @@ export interface PackSummary {
   quantity: number;
   status: string;
   assetCount?: number;
+  thumbnails?: PackThumbnail[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PackThumbnail {
+  id: string;
+  name?: string | null;
+  prompt: string;
+  finalPngPath?: string | null;
+  finalSvgPath?: string | null;
+  width: number;
+  height: number;
 }
 
 export interface QualityGateResult {
@@ -112,6 +123,7 @@ export interface PackResponse {
   assetType: string;
   quantity: number;
   status: string;
+  style?: string | null;
   assets: AssetResponse[];
   output?: {
     width: number;

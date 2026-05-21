@@ -56,7 +56,7 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
   }
 
   const scores = pack.consistencyScores || {};
-  const overall = scores.overallConsistency ?? scores.styleConsistency ?? 0;
+  const overall = scores.overall ?? scores.overallConsistency ?? scores.styleConsistency ?? 0;
   const outliers = pack.outliers || [];
 
   return (
@@ -124,6 +124,7 @@ export function PackConsistencyPanel({ pack }: PackConsistencyPanelProps) {
         <ConsistencyBar label="Stroke" score={scores.strokeConsistency} />
         <ConsistencyBar label="Palette" score={scores.paletteConsistency} />
         <ConsistencyBar label="Grid" score={scores.gridConsistency} />
+        <ConsistencyBar label="Metaphor" score={scores.metaphorDiversity} />
       </div>
 
       {/* Shared Style System */}

@@ -10,7 +10,7 @@ export function TopBar({ actions }: TopBarProps) {
 
   const navLinks = [
     { to: "/assets/new", label: "Asset Builder" },
-    { to: "/packs/new", label: "Pack Builder" },
+    { to: "/packs", label: "My Packs" },
     { to: "/history", label: "History" },
   ];
 
@@ -35,7 +35,7 @@ export function TopBar({ actions }: TopBarProps) {
         </Link>
         <nav className="hidden sm:flex items-center gap-6">
           {navLinks.map((link) => {
-            const active = location.pathname === link.to;
+            const active = location.pathname === link.to || (link.to === "/packs" && location.pathname.startsWith("/packs/"));
             return (
               <Link
                 key={link.to}

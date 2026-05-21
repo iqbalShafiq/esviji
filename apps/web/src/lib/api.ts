@@ -3,6 +3,7 @@ import { resolveApiAssetUrl } from "./download.js";
 import type {
   BuildSvgAssetRequest,
   BuildSvgPackRequest,
+  BuildSvgPackAssetRequest,
   IterateSvgAssetRequest,
   RenderSvgRequest,
   OptimizeSvgRequest,
@@ -182,6 +183,18 @@ export async function buildSvgPack(
   return { jobId: payload.jobId };
 }
 
+export async function buildSvgPackAsset(
+  packId: string,
+  data: BuildSvgPackAssetRequest
+): Promise<{ jobId: string }> {
+  const res = await api.post<ApiEnvelope<{ jobId: string }>>(
+    `/api/packs/${packId}/assets/build`,
+    data
+  );
+  const payload = unwrapEnvelope(res.data);
+  return { jobId: payload.jobId };
+}
+
 export async function iterateSvgAsset(
   data: IterateSvgAssetRequest
 ): Promise<AssetResponse> {
@@ -268,7 +281,18 @@ export async function assignAssetToPack(
 
 export async function listPacks(): Promise<PackSummary[]> {
   const res = await api.get<ApiEnvelope<PackSummary[]>>("/api/packs");
-  return unwrapEnvelope(res.data);
+  return unwrapEnvelope(res.data).map((pack) => ({
+    ...pack,
+    thumbnails: pack.thumbnails?.map((thumbnail) => ({
+      ...thumbnail,
+      finalPngPath: thumbnail.finalPngPath
+        ? resolveApiAssetUrl(thumbnail.finalPngPath)
+        : thumbnail.finalPngPath,
+      finalSvgPath: thumbnail.finalSvgPath
+        ? resolveApiAssetUrl(thumbnail.finalSvgPath)
+        : thumbnail.finalSvgPath,
+    })),
+  }));
 }
 
 export async function createPack(data: {
@@ -285,6 +309,8 @@ export async function getPack(packId: string): Promise<PackResponse> {
   const pack = unwrapEnvelope(res.data);
   return {
     ...pack,
+    sharedStyleSystem: pack.sharedStyleSystem ?? (pack as unknown as { styleSystem?: Record<string, unknown> }).styleSystem,
+    zipUrl: pack.zipUrl ? resolveApiAssetUrl(pack.zipUrl) : pack.zipUrl,
     assets: (pack.assets ?? []).map((asset) =>
       normalizeAsset(asset as unknown as RawAsset, asset.finalSvg),
     ),

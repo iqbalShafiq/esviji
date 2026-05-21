@@ -43,23 +43,26 @@ export function AssetCard({ asset, isOutlier, onRefine }: AssetCardProps) {
 
   return (
     <div
-      className="flex flex-col gap-2.5 p-3 border transition-all hover:-translate-y-0.5"
+      className="group flex h-auto max-w-[240px] flex-col gap-2.5 border p-3 transition-all hover:-translate-y-0.5"
       style={{
         background: "var(--surface)",
         borderColor: isOutlier ? "var(--amber)" : "var(--line)",boxShadow: isOutlier ? "0 0 0 1px var(--amber)" : undefined,
       }}
     >
-      <div
-        className="relative flex items-center justify-center overflow-hidden"
+      <button
+        type="button"
+        className="relative flex w-full items-center justify-center overflow-hidden focus:outline-none focus:ring-2"
         style={{
           aspectRatio: "1 / 1",
           background: "var(--surface-2)",}}
+        onClick={() => onRefine?.(asset)}
+        title="Preview asset"
       >
         {previewSrc ? (
           <img
             src={previewSrc}
             alt={asset.prompt}
-            className="w-3/4 h-3/4 object-contain"
+            className="h-3/4 w-3/4 object-contain transition-transform duration-200 group-hover:scale-105"
           />
         ) : (
           <div
@@ -67,6 +70,21 @@ export function AssetCard({ asset, isOutlier, onRefine }: AssetCardProps) {
             style={{ background: "var(--line)" }}
           />
         )}
+
+        <span
+          className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          style={{ background: "rgba(7, 17, 31, 0.42)", color: "#ffffff" }}
+        >
+          <span
+            className="flex h-10 w-10 items-center justify-center"
+            style={{ background: "rgba(255, 255, 255, 0.16)", border: "1px solid rgba(255, 255, 255, 0.42)" }}
+          >
+            <svg width="18" height="18" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M1 7C1 7 3 3 7 3C11 3 13 7 13 7C13 7 11 11 7 11C3 11 1 7 1 7Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </span>
+        </span>
 
         {isOutlier && (
           <span
@@ -79,7 +97,7 @@ export function AssetCard({ asset, isOutlier, onRefine }: AssetCardProps) {
             Outlier
           </span>
         )}
-      </div>
+      </button>
 
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2">
@@ -146,21 +164,6 @@ export function AssetCard({ asset, isOutlier, onRefine }: AssetCardProps) {
               </svg>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={() => onRefine?.(asset)}
-            className="p-1.5 border transition-all active:scale-95 ml-auto"
-            title="Refine"
-            style={{
-              borderColor: "var(--line)",color: "var(--ink)",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M1 7C1 7 3 3 7 3C11 3 13 7 13 7C13 7 11 11 7 11C3 11 1 7 1 7Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </button>
         </div>
       </div>
     </div>

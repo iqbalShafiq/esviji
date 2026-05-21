@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "../components/layout/AppShell.js";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
@@ -17,6 +18,7 @@ import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
+import { DropdownSelect } from "../components/common/DropdownSelect.js";
 import type {
   AssetResponse,
   PreviewMode,
@@ -24,10 +26,11 @@ import type {
   PreviewSize,
   JobResponse,
 } from "../types/index.js";
-import { getAsset, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
+import { getAsset, iterateSvgAsset, listPacks, subscribeJobStream } from "../lib/api.js";
 
 export default function AssetBuilderPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const loadAssetId = searchParams.get("load");
 
   const [asset, setAsset] = useState<AssetResponse | undefined>();
@@ -43,6 +46,10 @@ export default function AssetBuilderPage() {
     queryKey: ["asset", loadAssetId],
     queryFn: () => getAsset(loadAssetId!),
     enabled: !!loadAssetId && !asset,
+  });
+  const { data: packs = [] } = useQuery({
+    queryKey: ["packs", "list"],
+    queryFn: listPacks,
   });
 
   useEffect(() => {
@@ -137,7 +144,34 @@ export default function AssetBuilderPage() {
   }, [job?.status]);
 
   return (
-    <StudioFrame>
+    <StudioFrame
+      topBarActions={
+        <div className="w-[220px]">
+          <DropdownSelect
+            id="asset-builder-pack-jump"
+            value=""
+            placeholder="Open a pack..."
+            options={[
+              {
+                value: "",
+                label: "Open a pack...",
+                description: "Jump to a pack detail page",
+                tone: "blueprint",
+              },
+              ...packs.map((pack) => ({
+                value: pack.id,
+                label: pack.prompt,
+                description: `${pack.assetCount ?? pack.quantity} assets / ${pack.assetType.replace(/_/g, " ")}`,
+                tone: "cyan" as const,
+              })),
+            ]}
+            onValueChange={(value) => {
+              if (value) navigate(`/packs/${value}`);
+            }}
+          />
+        </div>
+      }
+    >
       <AppShell
         leftPanel={
           <div className="h-full">

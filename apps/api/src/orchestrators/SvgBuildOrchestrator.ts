@@ -74,6 +74,7 @@ export class SvgBuildOrchestrator {
     request: BuildSvgAssetRequest,
     options?: {
       sharedStyleSystem?: StyleSystem;
+      packConsistencyContext?: string;
       packId?: string;
       name?: string;
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
@@ -128,7 +129,8 @@ export class SvgBuildOrchestrator {
 
       options?.onStage?.('classify', 'Classifying asset type', 10);
       // Step 2: Classify asset type
-      const classification = await this.classifier.classify(request.prompt, {
+      const requestPrompt = appendPackContext(request.prompt, options?.packConsistencyContext);
+      const classification = await this.classifier.classify(requestPrompt, {
         explicitAssetType: request.assetType,
         width: request.output.width,
         height: request.output.height,
@@ -163,7 +165,7 @@ export class SvgBuildOrchestrator {
 
       options?.onStage?.('brief', 'Building creative brief', 20);
       // Step 4: Build creative brief
-      const brief = await this.briefBuilder.build(request.prompt, classification, {
+      const brief = await this.briefBuilder.build(requestPrompt, classification, {
         style: request.style,
         width: request.output.width,
         height: request.output.height,
@@ -625,6 +627,7 @@ export class SvgBuildOrchestrator {
     request: BuildSvgAssetRequest,
     options: {
       sharedStyleSystem?: StyleSystem;
+      packConsistencyContext?: string;
       packId?: string;
       name?: string;
       onStage?: (stage: PipelineStage, message: string, progress: number) => void;
@@ -664,6 +667,7 @@ export class SvgBuildOrchestrator {
       pngPath: Annotation<string | undefined>(),
       pngUrl: Annotation<string | undefined>(),
       debugPngPath: Annotation<string | undefined>(),
+      packContextPrompt: Annotation<string | undefined>(),
       iteration: Annotation<number>(),
       bestIteration: Annotation<BestIteration>(),
       stopReason: Annotation<string | undefined>(),
@@ -680,9 +684,20 @@ export class SvgBuildOrchestrator {
     };
 
     const graph = new StateGraph(BuildState)
+      .addNode('pack_context', async () => {
+        if (!options?.packConsistencyContext) {
+          return { packContextPrompt: undefined };
+        }
+
+        options.onStage?.('brief', 'Preparing pack consistency context', 8);
+        return {
+          packContextPrompt: options.packConsistencyContext,
+        };
+      })
       .addNode('classify', async () => {
         options?.onStage?.('classify', 'Classifying asset type', 10);
-        const classification = await this.classifier.classify(request.prompt, {
+        const requestPrompt = appendPackContext(request.prompt, options?.packConsistencyContext);
+        const classification = await this.classifier.classify(requestPrompt, {
           explicitAssetType: request.assetType,
           width: request.output.width,
           height: request.output.height,
@@ -720,8 +735,9 @@ export class SvgBuildOrchestrator {
       })
       .addNode('build_brief', async (state: BuildStateValue) => {
         const classification = requireState(state.classification, 'classification');
+        const requestPrompt = appendPackContext(request.prompt, state.packContextPrompt);
         options?.onStage?.('brief', 'Building creative brief', 20);
-        const brief = await this.briefBuilder.build(request.prompt, classification, {
+        const brief = await this.briefBuilder.build(requestPrompt, classification, {
           style: request.style,
           width: request.output.width,
           height: request.output.height,
@@ -1029,7 +1045,8 @@ export class SvgBuildOrchestrator {
         logger.info({ assetId: asset.id }, 'Pipeline completed successfully');
         return { finalAsset: updatedAsset };
       })
-      .addEdge(START, 'classify')
+      .addEdge(START, 'pack_context')
+      .addEdge('pack_context', 'classify')
       .addEdge('classify', 'reference_analyze')
       .addEdge('reference_analyze', 'build_brief')
       .addEdge('build_brief', 'style')
@@ -1067,6 +1084,7 @@ export class SvgBuildOrchestrator {
         pngPath: undefined,
         pngUrl: undefined,
         debugPngPath: undefined,
+        packContextPrompt: undefined,
         iteration: 1,
         bestIteration: {
           iteration: 1,
@@ -1252,6 +1270,19 @@ function parseRepairToolEvent(
     return undefined;
   }
   return { name, status: statusByVerb[verb], message };
+}
+
+function appendPackContext(prompt: string, packConsistencyContext?: string): string {
+  if (!packConsistencyContext?.trim()) {
+    return prompt;
+  }
+
+  return `${prompt.trim()}
+
+Pack consistency context:
+${packConsistencyContext.trim()}
+
+Use this context as a hard visual system. Keep the new SVG consistent with the pack while making this asset's metaphor distinct and readable.`;
 }
 
 function deepMerge(base: unknown, patch: unknown): unknown {

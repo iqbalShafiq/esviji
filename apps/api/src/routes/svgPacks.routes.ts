@@ -17,6 +17,13 @@ export async function registerSvgPackRoutes(
     await controller.build(request as Parameters<SvgPacksController['build']>[0], reply);
   });
 
+  app.post('/api/packs/:packId/assets/build', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.buildAsset(
+      request as Parameters<SvgPacksController['buildAsset']>[0],
+      reply
+    );
+  });
+
   app.get('/api/packs/:packId', async (request: FastifyRequest, reply: FastifyReply) => {
     await controller.getById(
       request as Parameters<SvgPacksController['getById']>[0],
