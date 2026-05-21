@@ -48,36 +48,6 @@ export function ExportButtons({ assetId, svg, pngUrl }: ExportButtonsProps) {
             </svg>
             Download SVG
           </button>
-
-          <button
-            type="button"
-            onClick={handleCopySvg}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium border transition-all active:scale-[0.98]"
-            style={{
-              borderColor: "var(--line)",
-              background: "var(--surface)",
-              color: "var(--ink)",
-              fontFamily: "var(--font-body)",}}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect
-                x="3"
-                y="3"
-                width="8"
-                height="8"
-                rx="1.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-              <path
-                d="M1 9V3C1 1.89543 1.89543 1 3 1H9"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-            Copy SVG
-          </button>
         </>
       )}
 

@@ -47,7 +47,7 @@ export function SvgCodeEditor({ svg }: SvgCodeEditorProps) {
 
   return (
     <div
-      className="border flex flex-col overflow-hidden"
+      className="border flex flex-col"
       style={{ borderColor: "var(--line)", background: "var(--surface)" }}
     >
       <div
