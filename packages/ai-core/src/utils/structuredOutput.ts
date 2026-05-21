@@ -60,6 +60,34 @@ ${JSON.stringify(cleanSchema, null, 2)}`;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const structuredProvider = provider as unknown as {
+        generateStructured?: <U>(
+          systemPrompt: string,
+          userPrompt: string,
+          schema: z.ZodType<U, z.ZodTypeDef, unknown>,
+          options?: {
+            responseFormat?: "json_object";
+            reasoningEffort?: "low" | "medium" | "high";
+            onToken?: (token: string) => void;
+            onReasoning?: (token: string) => void;
+          }
+        ) => Promise<U>;
+      };
+
+      if (structuredProvider.generateStructured) {
+        return await structuredProvider.generateStructured(
+          systemPrompt,
+          buildRetryPrompt(userPrompt, errors),
+          schema,
+          {
+            responseFormat: "json_object",
+            reasoningEffort: options?.reasoningEffort ?? "medium",
+            onToken: options?.onToken,
+            onReasoning: options?.onReasoning,
+          }
+        );
+      }
+
       const text = await provider.generateText(
         enhancedSystemPrompt,
         buildRetryPrompt(userPrompt, errors),

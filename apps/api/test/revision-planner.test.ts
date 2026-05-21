@@ -53,6 +53,55 @@ test('OpenAiProvider sends JSON response format for invoke and stream calls', as
   assert.match(source, /model\.stream\([\s\S]*buildCallOptions\(options\)/);
 });
 
+test('OpenAiProvider uses ChatOpenAI withStructuredOutput for structured generation', async () => {
+  const source = await readFile(
+    new URL('../../../packages/ai-core/src/providers/OpenAiProvider.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /generateStructured<T>/);
+  assert.match(source, /model\.withStructuredOutput\(jsonSchema, \{/);
+  assert.match(source, /method:\s*"jsonSchema"/);
+  assert.match(source, /strict:\s*true/);
+  assert.match(source, /includeRaw:\s*true/);
+  assert.match(source, /streamStructured/);
+  assert.match(source, /response_format:\s*\{[\s\S]*type:\s*"json_schema"/);
+});
+
+test('OpenAiProvider converts optional Zod fields to nullable required JSON schema fields', async () => {
+  const source = await readFile(
+    new URL('../../../packages/ai-core/src/providers/OpenAiProvider.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /createOpenAiStrictJsonSchema/);
+  assert.match(source, /schema\.required = Object\.keys\(properties\)/);
+  assert.match(source, /normalizeStrictJsonSchema\(propertySchema, !required\.has\(key\)\)/);
+  assert.match(source, /schema\.properties = normalizedProperties/);
+  assert.match(source, /makeNullable/);
+  assert.match(source, /pruneNulls/);
+});
+
+test('generateStructuredOutput delegates to provider native structured generation when available', async () => {
+  const source = await readFile(
+    new URL('../../../packages/ai-core/src/utils/structuredOutput.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /structuredProvider\.generateStructured/);
+  assert.match(source, /return await structuredProvider\.generateStructured\(\s*systemPrompt,/);
+});
+
+test('OpenAiProvider extracts OpenAI reasoning summaries from streamed content blocks', async () => {
+  const source = await readFile(
+    new URL('../../../packages/ai-core/src/providers/OpenAiProvider.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /Array\.isArray\(block\.summary\)/);
+  assert.match(source, /summary_text|text/);
+});
+
 test('OpenAiProvider only applies timeout while opening streams, not while consuming chunks', async () => {
   const source = await readFile(
     new URL('../../../packages/ai-core/src/providers/OpenAiProvider.ts', import.meta.url),
