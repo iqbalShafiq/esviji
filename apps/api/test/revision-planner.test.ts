@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'fs/promises';
-import { LlmProvider } from '../../../packages/ai-core/src/index.js';
+import { z } from 'zod';
+import { LlmProvider, OpenAiProvider } from '../../../packages/ai-core/src/index.js';
 import { RevisionPlannerService } from '../src/services/RevisionPlannerService.js';
 import type { GenerateTextOptions } from '../../../packages/ai-core/src/providers/LlmProvider.js';
 
@@ -98,8 +99,71 @@ test('OpenAiProvider extracts OpenAI reasoning summaries from streamed content b
     'utf8'
   );
 
+  assert.match(source, /summary:\s*"auto"/);
+  assert.match(source, /useResponsesApi:\s*Boolean\(options\?\.onReasoning\)/);
   assert.match(source, /Array\.isArray\(block\.summary\)/);
   assert.match(source, /summary_text|text/);
+});
+
+test('OpenAiProvider uses final parsed structured output when Responses stream has no text deltas', async () => {
+  const source = await readFile(
+    new URL('../../../packages/ai-core/src/providers/OpenAiProvider.ts', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(source, /additional_kwargs\?:\s*\{[\s\S]*parsed\?: unknown/);
+  assert.match(source, /let parsed: unknown/);
+  assert.match(source, /normalized\.additional_kwargs\?\.parsed/);
+  assert.match(source, /return schema\.parse\(pruneNulls\(parsed\)\)/);
+});
+
+test('OpenAiProvider parses final structured Responses chunk when streamed text is empty', async () => {
+  const provider = new OpenAiProvider('test-key', 'gpt-5') as unknown as {
+    streamStructured: <T>(
+      model: { stream: () => Promise<AsyncIterable<unknown>> },
+      messages: Array<{ role: 'system' | 'user'; content: string }>,
+      schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+      schemaName: string,
+      jsonSchema: Record<string, unknown>,
+      options: GenerateTextOptions
+    ) => Promise<T>;
+  };
+  const reasoning: string[] = [];
+  const tokens: string[] = [];
+  const schema = z.object({
+    strategy: z.enum(['targeted_patch', 'full_regenerate']),
+    notes: z.string().optional(),
+  });
+  const model = {
+    stream: async () =>
+      (async function* () {
+        yield {
+          contentBlocks: [{ type: 'reasoning', summary: [{ text: 'checking final output' }] }],
+          additional_kwargs: {
+            parsed: { strategy: 'full_regenerate', notes: null },
+          },
+        };
+      })(),
+  };
+
+  const result = await provider.streamStructured(
+    model,
+    [
+      { role: 'system', content: 'Return JSON.' },
+      { role: 'user', content: 'Plan a revision.' },
+    ],
+    schema,
+    'structured_response',
+    {},
+    {
+      onReasoning: (token) => reasoning.push(token),
+      onToken: (token) => tokens.push(token),
+    }
+  );
+
+  assert.deepEqual(result, { strategy: 'full_regenerate' });
+  assert.deepEqual(reasoning, ['checking final output']);
+  assert.deepEqual(tokens, []);
 });
 
 test('OpenAiProvider only applies timeout while opening streams, not while consuming chunks', async () => {

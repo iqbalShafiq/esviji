@@ -20,6 +20,9 @@ type ChatMessageChunk = {
   text?: string;
   content?: ChatMessageContent;
   contentBlocks?: Array<Record<string, unknown>>;
+  additional_kwargs?: {
+    parsed?: unknown;
+  };
 };
 
 type ChatInvokeResult = {
@@ -100,8 +103,9 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
       maxRetries: 0,
       reasoning: {
         effort: options?.reasoningEffort ?? "medium",
+        ...(options?.onReasoning ? { summary: "auto" as const } : {}),
       },
-      useResponsesApi: false,
+      useResponsesApi: Boolean(options?.onReasoning),
       streamUsage: false,
       configuration: this.baseURL ? { baseURL: this.baseURL } : undefined,
     });
@@ -234,10 +238,14 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
     );
 
     let full = "";
+    let parsed: unknown;
     for await (const chunk of stream) {
       const normalized = chunk as ChatMessageChunk;
       const reasoning = extractReasoning(normalized);
       const text = extractText(normalized);
+      if (normalized.additional_kwargs?.parsed !== undefined) {
+        parsed = normalized.additional_kwargs.parsed;
+      }
 
       if (reasoning) {
         options.onReasoning?.(reasoning);
@@ -247,6 +255,10 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
         full += text;
         options.onToken?.(text);
       }
+    }
+
+    if (parsed !== undefined) {
+      return schema.parse(pruneNulls(parsed));
     }
 
     return schema.parse(pruneNulls(JSON.parse(repairJson(full))));
