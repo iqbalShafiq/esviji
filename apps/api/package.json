@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/server.ts",
+    "dev": "pnpm prisma generate --schema ../../prisma/schema.prisma && tsx watch src/server.ts",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/**/*.test.ts",

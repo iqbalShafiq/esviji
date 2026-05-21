@@ -25,7 +25,13 @@ export class RevisionPlannerService {
       system,
       user,
       RevisionPlanSchema,
-      { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
+      {
+        maxRetries: 3,
+        reasoningEffort: 'medium',
+        onToken: options?.onToken,
+        onReasoning: options?.onReasoning,
+        onRetry: options?.onRetry,
+      }
     );
 
     return plan;

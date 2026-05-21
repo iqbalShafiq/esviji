@@ -28,8 +28,12 @@ type ChatInvokeResult = {
   contentBlocks?: Array<Record<string, unknown>>;
 };
 
+type ChatCallOptions = {
+  response_format?: { type: "json_object" };
+  signal?: AbortSignal;
+};
+
 const STREAM_START_TIMEOUT_MS = 15_000;
-const STREAM_CHUNK_TIMEOUT_MS = 60_000;
 
 export class OpenAiProvider extends LlmProvider {
   private defaultModel: string;
@@ -60,10 +64,13 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
       return this.streamText(model, effectiveSystemPrompt, userPrompt, options);
     }
 
-    const response = await model.invoke([
-      { role: "system", content: effectiveSystemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
+    const response = await model.invoke(
+      [
+        { role: "system", content: effectiveSystemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      buildCallOptions(options)
+    );
     const text = extractText(response as ChatInvokeResult).trim();
 
     if (text.length > 0) {
@@ -101,7 +108,7 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
     ];
     const abortController = new AbortController();
     const stream = await withTimeout(
-      model.stream(messages, { signal: abortController.signal }),
+      model.stream(messages, { ...buildCallOptions(options), signal: abortController.signal }),
       STREAM_START_TIMEOUT_MS,
       () => abortController.abort()
     );
@@ -110,11 +117,7 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
     let full = "";
     let streamDone = false;
     while (!streamDone) {
-      const result = await withTimeout(
-        iterator.next(),
-        full.length === 0 ? STREAM_START_TIMEOUT_MS : STREAM_CHUNK_TIMEOUT_MS,
-        () => abortController.abort()
-      );
+      const result = await iterator.next();
       if (result.done) {
         streamDone = true;
         continue;
@@ -135,7 +138,7 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
     }
 
     if (full.trim().length === 0) {
-      const response = await model.invoke(messages);
+      const response = await model.invoke(messages, buildCallOptions(options));
       full = extractText(response as ChatInvokeResult).trim();
       if (full.length > 0) {
         options.onToken?.(full);
@@ -164,6 +167,14 @@ ${JSON.stringify(options.jsonSchema, null, 2)}`
 
     return schema.parse(JSON.parse(repairJson(text)));
   }
+}
+
+function buildCallOptions(options?: GenerateTextOptions): ChatCallOptions | undefined {
+  if (options?.responseFormat !== "json_object") {
+    return undefined;
+  }
+
+  return { response_format: { type: "json_object" } };
 }
 
 function extractText(message: ChatMessageChunk | ChatInvokeResult): string {

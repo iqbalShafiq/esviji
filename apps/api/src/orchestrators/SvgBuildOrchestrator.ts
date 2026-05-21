@@ -701,7 +701,7 @@ export class SvgBuildOrchestrator {
         logger.info({ assetId: asset.id }, 'Reference analysis completed');
         return { referenceAnalysis };
       })
-      .addNode('brief', async (state: BuildStateValue) => {
+      .addNode('build_brief', async (state: BuildStateValue) => {
         const classification = requireState(state.classification, 'classification');
         options?.onStage?.('brief', 'Building creative brief', 20);
         const brief = await this.briefBuilder.build(request.prompt, classification, {
@@ -736,7 +736,7 @@ export class SvgBuildOrchestrator {
         );
         return { styleSystem };
       })
-      .addNode('layout', async (state: BuildStateValue) => {
+      .addNode('plan_layout', async (state: BuildStateValue) => {
         const classification = requireState(state.classification, 'classification');
         const brief = requireState(state.brief, 'brief');
         const styleSystem = requireState(state.styleSystem, 'styleSystem');
@@ -1014,10 +1014,10 @@ export class SvgBuildOrchestrator {
       })
       .addEdge(START, 'classify')
       .addEdge('classify', 'reference_analyze')
-      .addEdge('reference_analyze', 'brief')
-      .addEdge('brief', 'style')
-      .addEdge('style', 'layout')
-      .addEdge('layout', 'generate_svg')
+      .addEdge('reference_analyze', 'build_brief')
+      .addEdge('build_brief', 'style')
+      .addEdge('style', 'plan_layout')
+      .addEdge('plan_layout', 'generate_svg')
       .addEdge('generate_svg', 'render_preview')
       .addEdge('render_preview', 'evaluate')
       .addConditionalEdges(

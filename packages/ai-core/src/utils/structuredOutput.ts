@@ -38,6 +38,7 @@ export async function generateStructuredOutput<T>(
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   options?: {
     maxRetries?: number;
+    reasoningEffort?: "low" | "medium" | "high";
     onToken?: (token: string) => void;
     onReasoning?: (token: string) => void;
     onRetry?: (attempt: number, maxRetries: number, error: Error) => void;
@@ -64,7 +65,7 @@ ${JSON.stringify(cleanSchema, null, 2)}`;
         buildRetryPrompt(userPrompt, errors),
         {
           responseFormat: "json_object",
-          reasoningEffort: "medium",
+          reasoningEffort: options?.reasoningEffort ?? "medium",
           onToken: options?.onToken,
           onReasoning: options?.onReasoning,
         }
