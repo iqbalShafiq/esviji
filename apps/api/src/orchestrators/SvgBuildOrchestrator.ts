@@ -34,6 +34,23 @@ import { IssueTracker } from '../services/IssueTracker.js';
 import { SvgGenerationWorkflowService } from '../agents/SvgGenerationWorkflowService.js';
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 
+const BUILD_GRAPH_SETUP_STEPS = 5;
+const BUILD_GRAPH_STEPS_PER_ITERATION = 3;
+const BUILD_GRAPH_REVISION_STEPS_PER_EXTRA_ITERATION = 1;
+const BUILD_GRAPH_EXPORT_STEPS = 1;
+const BUILD_GRAPH_RECURSION_BUFFER = 4;
+
+export function calculateBuildGraphRecursionLimit(maxIterations: number): number {
+  const normalizedMaxIterations = Math.max(1, Math.ceil(maxIterations));
+  return (
+    BUILD_GRAPH_SETUP_STEPS +
+    normalizedMaxIterations * BUILD_GRAPH_STEPS_PER_ITERATION +
+    (normalizedMaxIterations - 1) * BUILD_GRAPH_REVISION_STEPS_PER_EXTRA_ITERATION +
+    BUILD_GRAPH_EXPORT_STEPS +
+    BUILD_GRAPH_RECURSION_BUFFER
+  );
+}
+
 export class SvgBuildOrchestrator {
   constructor(
     private classifier: AssetTypeClassifierService,
@@ -1066,6 +1083,7 @@ export class SvgBuildOrchestrator {
           thread_id: asset.id,
         },
         runName: 'svg_asset_build_pipeline',
+        recursionLimit: calculateBuildGraphRecursionLimit(maxIterations),
       }
     );
 
