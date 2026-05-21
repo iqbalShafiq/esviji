@@ -21,10 +21,8 @@ export function PackAssetBuilderForm({
 }: PackAssetBuilderFormProps) {
   const [form, setForm] = useState<BuildSvgPackAssetRequest>({
     prompt: "",
-    name: "",
     assetType: inferAssetType(pack.assetType),
     mode: "direct",
-    style: pack.style ?? "",
     output: {
       width: pack.output?.width ?? pack.assets[0]?.output.width ?? 512,
       height: pack.output?.height ?? pack.assets[0]?.output.height ?? 512,
@@ -94,31 +92,6 @@ export function PackAssetBuilderForm({
           />
         </div>
 
-        <div className="mt-4 flex flex-col gap-1.5">
-          <label className="text-xs font-medium" style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
-            Name
-          </label>
-          <input
-            className="w-full border px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-            style={{ background: "var(--bg)", borderColor: "var(--line)", color: "var(--ink)" }}
-            placeholder="e.g. Billing, Search, Celebration"
-            value={form.name ?? ""}
-            onChange={(event) => updateField("name", event.target.value || undefined)}
-          />
-        </div>
-
-        <div className="mt-4 flex flex-col gap-1.5">
-          <label className="text-xs font-medium" style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
-            Style
-          </label>
-          <input
-            className="w-full border px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-            style={{ background: "var(--bg)", borderColor: "var(--line)", color: "var(--ink)" }}
-            value={form.style ?? ""}
-            onChange={(event) => updateField("style", event.target.value || undefined)}
-          />
-        </div>
-
         <div className="mt-4 grid grid-cols-2 gap-3">
           <NumberField label="Width" value={form.output.width} onChange={(value) => updateOutput("width", value)} />
           <NumberField label="Height" value={form.output.height} onChange={(value) => updateOutput("height", value)} />
@@ -144,7 +117,7 @@ export function PackAssetBuilderForm({
             Consistency context active
           </p>
           <p className="mt-1 text-[10px] leading-4" style={{ color: "var(--muted)" }}>
-            New SVGs inherit this pack's shared style system and are re-scored against existing assets after generation.
+            New SVGs inherit this pack's shared style system, palette, stroke logic, canvas density, and existing asset rhythm.
           </p>
         </div>
 
@@ -197,8 +170,6 @@ function NumberField({
 function cleanRequest(form: BuildSvgPackAssetRequest): BuildSvgPackAssetRequest {
   return {
     ...form,
-    name: form.name?.trim() || undefined,
-    style: form.style?.trim() || undefined,
     prompt: form.prompt.trim(),
   };
 }
