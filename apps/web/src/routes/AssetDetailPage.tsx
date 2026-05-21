@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../components/layout/AppShell.js";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { PreviewWorkspace } from "../components/builder/PreviewWorkspace.js";
@@ -16,7 +16,10 @@ import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { JsonInspector } from "../components/builder/JsonInspector.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
-import { getAsset, iterateSvgAsset } from "../lib/api.js";
+import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
+import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
+import { deleteAsset, getAsset, iterateSvgAsset } from "../lib/api.js";
+import type { AssetResponse } from "../types/index.js";
 import type {
   PreviewMode,
   BackgroundMode,
@@ -25,10 +28,13 @@ import type {
 
 export default function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<PreviewMode>("final");
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
   const [isRefining, setIsRefining] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const {
     data: asset,
@@ -38,6 +44,15 @@ export default function AssetDetailPage() {
     queryKey: ["asset", assetId],
     queryFn: () => getAsset(assetId!),
     enabled: !!assetId,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteAsset(assetId!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["assets", "list"] });
+      await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+      navigate("/history");
+    },
   });
 
   // Reset preview when asset changes
@@ -58,75 +73,35 @@ export default function AssetDetailPage() {
     }
   };
 
+  const handleAssetUpdated = (updatedAsset: AssetResponse) => {
+    queryClient.setQueryData(["asset", assetId], updatedAsset);
+  };
+
   return (
-    <StudioFrame>
+    <StudioFrame
+      topBarActions={
+        asset ? (
+          <button
+            type="button"
+            className="px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: "var(--red)", color: "#ffffff" }}
+            disabled={deleteMutation.isPending}
+            onClick={() => setIsDeleteDialogOpen(true)}
+          >
+            Delete
+          </button>
+        ) : undefined
+      }
+    >
       <AppShell
         leftPanel={
-          <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
+          <div className="h-full">
             {asset && (
-              <>
-                <div
-                  className="p-4 border flex flex-col gap-2"
-                  style={{
-                    borderColor: "var(--line)",
-                    background: "var(--surface)",
-                  }}
-                >
-                  <h2
-                    className="text-sm font-semibold"
-                    style={{
-                      color: "var(--ink)",
-                      fontFamily: "var(--font-display)",
-                    }}
-                  >
-                    {asset.prompt}
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    <span
-                      className="text-[10px] font-mono px-2 py-1 border"
-                      style={{
-                        borderColor: "var(--line)",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                      }}
-                    >
-                      {asset.assetType}
-                    </span>
-                    <span
-                      className="text-[10px] font-mono px-2 py-1 border"
-                      style={{
-                        borderColor: "var(--line)",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                      }}
-                    >
-                      {asset.mode}
-                    </span>
-                    <span
-                      className="text-[10px] font-mono px-2 py-1 border"
-                      style={{
-                        borderColor: "var(--line)",
-                        color: "var(--muted)",
-                        background: "var(--bg)",
-                      }}
-                    >
-                      {asset.output.width}×{asset.output.height}
-                    </span>
-                  </div>
-                </div>
-
-                <ExportButtons
-                  assetId={asset.id}
-                  svg={asset.finalSvg}
-                  pngUrl={asset.finalPngUrl}
-                />
-
-                {asset.finalSvg && <SvgCodeEditor svg={asset.finalSvg} />}
-              </>
+              <AssetPackPanel asset={asset} onAssetUpdated={handleAssetUpdated} />
             )}
 
             {isLoading && (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 p-4">
                 <div
                   className="h-20 animate-pulse"
                   style={{ background: "var(--surface-2)" }}
@@ -188,6 +163,12 @@ export default function AssetDetailPage() {
           <div className="flex flex-col gap-4 p-4 overflow-y-auto h-full">
             {asset && (
               <>
+                <ExportButtons
+                  assetId={asset.id}
+                  svg={asset.finalSvg}
+                  pngUrl={asset.finalPngUrl}
+                />
+                {asset.finalSvg && <SvgCodeEditor svg={asset.finalSvg} />}
                 <ScoresCard scores={asset.evaluation?.scores} />
                 {asset.qualityGates && asset.qualityGates.length > 0 && (
                   <QualityGates gates={asset.qualityGates} />
@@ -218,6 +199,16 @@ export default function AssetDetailPage() {
             )}
           </div>
         }
+      />
+      <ConfirmationDialog
+        open={isDeleteDialogOpen}
+        title="Delete this asset?"
+        description="This removes the SVG asset from history and clears its generated iterations. This action cannot be undone."
+        confirmLabel="Delete Asset"
+        intent="danger"
+        isPending={deleteMutation.isPending}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={() => deleteMutation.mutate()}
       />
     </StudioFrame>
   );

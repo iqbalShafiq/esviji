@@ -7,7 +7,7 @@ import type {
   RenderSvgRequest,
   OptimizeSvgRequest,
 } from "@svg-builder/shared";
-import type { AssetResponse, PackResponse, JobResponse } from "../types/index.js";
+import type { AssetResponse, PackResponse, JobResponse, PackSummary } from "../types/index.js";
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -48,6 +48,8 @@ type RawAsset = {
   finalSvg?: string;
   finalSvgPath?: string;
   finalPngPath?: string;
+  packId?: string | null;
+  pack?: PackSummary | null;
   iterations?: RawIteration[];
   evaluation?: AssetResponse["evaluation"];
   qualityGates?: AssetResponse["qualityGates"];
@@ -209,6 +211,8 @@ export async function optimizeSvg(data: OptimizeSvgRequest): Promise<{ svg: stri
 
 export interface AssetListItem {
   id: string;
+  packId?: string | null;
+  pack?: PackSummary | null;
   name?: string | null;
   prompt: string;
   assetType: string;
@@ -245,9 +249,46 @@ export async function getAsset(assetId: string): Promise<AssetResponse> {
   return normalizeAsset(raw, finalSvg);
 }
 
+export async function deleteAsset(assetId: string): Promise<{ id: string }> {
+  const res = await api.delete<ApiEnvelope<{ id: string }>>(`/api/assets/${assetId}`);
+  return unwrapEnvelope(res.data);
+}
+
+export async function assignAssetToPack(
+  assetId: string,
+  packId: string | null,
+): Promise<AssetResponse> {
+  const res = await api.patch<ApiEnvelope<RawAsset>>(`/api/assets/${assetId}/pack`, {
+    packId,
+  });
+  const raw = unwrapEnvelope(res.data);
+  const finalSvg = await fetchSvgContent(raw.finalSvgPath);
+  return normalizeAsset(raw, finalSvg);
+}
+
+export async function listPacks(): Promise<PackSummary[]> {
+  const res = await api.get<ApiEnvelope<PackSummary[]>>("/api/packs");
+  return unwrapEnvelope(res.data);
+}
+
+export async function createPack(data: {
+  prompt: string;
+  assetType: string;
+  style?: string;
+}): Promise<PackSummary> {
+  const res = await api.post<ApiEnvelope<PackSummary>>("/api/packs", data);
+  return unwrapEnvelope(res.data);
+}
+
 export async function getPack(packId: string): Promise<PackResponse> {
-  const res = await api.get(`/api/packs/${packId}`);
-  return res.data;
+  const res = await api.get<ApiEnvelope<PackResponse>>(`/api/packs/${packId}`);
+  const pack = unwrapEnvelope(res.data);
+  return {
+    ...pack,
+    assets: (pack.assets ?? []).map((asset) =>
+      normalizeAsset(asset as unknown as RawAsset, asset.finalSvg),
+    ),
+  };
 }
 
 export default api;
@@ -302,6 +343,8 @@ function normalizeAsset(raw: RawAsset, finalSvg?: string): AssetResponse {
 
   return {
     id: raw.id ?? raw.assetId ?? "",
+    packId: raw.packId ?? raw.pack?.id ?? null,
+    pack: raw.pack ?? null,
     prompt: raw.prompt ?? "",
     assetType: raw.assetType ?? "icon",
     mode: raw.mode ?? "direct",

@@ -3,11 +3,13 @@ import { useMutation } from "@tanstack/react-query";
 import { ASSET_TYPES } from "@svg-builder/shared";
 import type { BuildSvgAssetRequest } from "@svg-builder/shared";
 import { buildSvgAsset } from "../../lib/api.js";
+import { DropdownSelect } from "../common/DropdownSelect.js";
 
 interface AssetBuilderFormProps {
   onJobCreated: (jobId: string) => void;
   onSubmitStart?: () => void;
   onBuildError?: () => void;
+  isSubmitting?: boolean;
 }
 
 type QualityPreset = "fast" | "balanced" | "high_fidelity";
@@ -30,7 +32,69 @@ const PRESET_CONFIG: Record<QualityPreset, { maxIterations: number; constraint: 
   },
 };
 
-export function AssetBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: AssetBuilderFormProps) {
+const QUALITY_PRESET_OPTIONS = [
+  {
+    value: "fast",
+    label: "Fast Draft",
+    description: "2 passes, clean silhouette, quick exploration",
+    tone: "cyan" as const,
+  },
+  {
+    value: "balanced",
+    label: "Balanced Studio",
+    description: "4 passes, stable structure and readable detail",
+    tone: "blueprint" as const,
+  },
+  {
+    value: "high_fidelity",
+    label: "High Fidelity",
+    description: "6 passes, refined composition and consistency",
+    tone: "amber" as const,
+  },
+];
+
+const ASSET_TYPE_OPTIONS = [
+  {
+    value: "",
+    label: "Auto Detect",
+    description: "Let VectorLab classify the asset from your prompt",
+    tone: "blueprint" as const,
+  },
+  ...ASSET_TYPES.map((type) => ({
+    value: type,
+    label: formatAssetTypeLabel(type),
+    description: getAssetTypeDescription(type),
+    tone: getAssetTypeTone(type),
+  })),
+];
+
+const MODE_OPTIONS = [
+  {
+    value: "direct",
+    label: "Direct Build",
+    description: "Prompt-first SVG generation",
+    tone: "blueprint" as const,
+  },
+  {
+    value: "reference",
+    label: "Reference Guided",
+    description: "Use an image URL as visual direction",
+    tone: "cyan" as const,
+  },
+  {
+    value: "premium",
+    label: "Premium Studio",
+    description: "More deliberate art direction and polish",
+    tone: "amber" as const,
+  },
+];
+
+export function AssetBuilderForm({
+  onJobCreated,
+  onSubmitStart,
+  onBuildError,
+  isSubmitting = false,
+}: AssetBuilderFormProps) {
   const [preset, setPreset] = useState<QualityPreset>("balanced");
   const [form, setForm] = useState<BuildSvgAssetRequest>({
     prompt: "",
@@ -58,6 +122,7 @@ export function AssetBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading || !form.prompt.trim()) return;
     onSubmitStart?.();
 
     const presetConfig = PRESET_CONFIG[preset];
@@ -88,7 +153,7 @@ export function AssetBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: 
   };
 
   const currentStage: string | undefined = undefined;
-  const isLoading = mutation.isPending;
+  const isLoading = mutation.isPending || isSubmitting;
 
   return (
     <form
@@ -137,87 +202,43 @@ export function AssetBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: 
           />
         </div>
 
-        <div className="flex flex-col gap-1.5 mt-4">
-          <label
-            className="text-xs font-medium"
-            style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
-          >
-            Quality Preset
-          </label>
-          <select
-            className="w-full px-3 py-2.5 text-sm border focus:outline-none focus:ring-2 transition-shadow appearance-none"
-            style={{
-              background: "var(--bg)",
-              borderColor: "var(--line)",
-              color: "var(--ink)",
-            }}
+        <div className="mt-4">
+          <DropdownSelect
+            id="quality-preset"
+            label="Quality Preset"
             value={preset}
-            onChange={(e) => {
-              const next = e.target.value as QualityPreset;
+            options={QUALITY_PRESET_OPTIONS}
+            onValueChange={(value) => {
+              const next = value as QualityPreset;
               setPreset(next);
               updateField("maxIterations", PRESET_CONFIG[next].maxIterations);
             }}
-          >
-            <option value="fast">Fast</option>
-            <option value="balanced">Balanced</option>
-            <option value="high_fidelity">High Fidelity</option>
-          </select>
+          />
         </div>
 
-        <div className="flex flex-col gap-1.5 mt-4">
-          <label
-            className="text-xs font-medium"
-            style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
-          >
-            Asset Type
-          </label>
-          <select
-            className="w-full px-3 py-2.5 text-sm border focus:outline-none focus:ring-2 transition-shadow appearance-none"
-            style={{
-              background: "var(--bg)",
-              borderColor: "var(--line)",
-              color: "var(--ink)",
-            }}
+        <div className="mt-4">
+          <DropdownSelect
+            id="asset-type"
+            label="Asset Type"
             value={form.assetType || ""}
-            onChange={(e) =>
-              updateField("assetType", e.target.value || undefined)
-            }
-          >
-            <option value="">Auto detect</option>
-            {ASSET_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t.replace(/_/g, " ")}
-              </option>
-            ))}
-          </select>
+            options={ASSET_TYPE_OPTIONS}
+            onValueChange={(value) => updateField("assetType", value || undefined)}
+          />
         </div>
 
-        <div className="flex flex-col gap-1.5 mt-4">
-          <label
-            className="text-xs font-medium"
-            style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}
-          >
-            Mode
-          </label>
-          <select
-            className="w-full px-3 py-2.5 text-sm border focus:outline-none focus:ring-2 transition-shadow appearance-none"
-            style={{
-              background: "var(--bg)",
-              borderColor: "var(--line)",
-              color: "var(--ink)",
-            }}
+        <div className="mt-4">
+          <DropdownSelect
+            id="asset-mode"
+            label="Mode"
             value={form.mode}
-            onChange={(e) =>
+            options={MODE_OPTIONS}
+            onValueChange={(value) =>
               updateField(
                 "mode",
-                e.target.value as BuildSvgAssetRequest["mode"]
+                value as BuildSvgAssetRequest["mode"]
               )
             }
-          >
-            <option value="direct">Direct</option>
-            <option value="reference">Reference</option>
-            <option value="premium">Premium</option>
-          </select>
+          />
         </div>
 
         <div className="flex flex-col gap-1.5 mt-4">
@@ -357,4 +378,36 @@ export function AssetBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: 
       </div>
     </form>
   );
+}
+
+function formatAssetTypeLabel(type: string): string {
+  return type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getAssetTypeDescription(type: string): string {
+  if (type.includes("pack") || type.includes("set")) {
+    return "Cohesive multi-asset family";
+  }
+  if (type.includes("logo") || type.includes("monogram") || type.includes("app_icon")) {
+    return "Identity-focused vector mark";
+  }
+  if (type.includes("illustration") || type.includes("empty_state")) {
+    return "Larger narrative SVG artwork";
+  }
+  if (type.includes("pattern") || type.includes("background")) {
+    return "Surface asset for layouts and scenes";
+  }
+  return "Single polished SVG asset";
+}
+
+function getAssetTypeTone(type: string): "default" | "blueprint" | "cyan" | "amber" {
+  if (type.includes("pack") || type.includes("set")) return "cyan";
+  if (type.includes("logo") || type.includes("monogram") || type.includes("app_icon")) return "amber";
+  if (type.includes("illustration") || type.includes("diagram") || type.includes("infographic")) {
+    return "blueprint";
+  }
+  return "default";
 }

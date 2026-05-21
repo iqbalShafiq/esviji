@@ -23,6 +23,8 @@ export interface IterationData {
 
 export interface AssetResponse {
   id: string;
+  packId?: string | null;
+  pack?: PackSummary | null;
   prompt: string;
   assetType: string;
   mode: string;
@@ -78,6 +80,17 @@ export interface JobResponse {
   }>;
   logs: Array<{ stage: string; message: string; at: string; progress?: number }>;
   error?: string;
+}
+
+export interface PackSummary {
+  id: string;
+  prompt: string;
+  assetType: string;
+  quantity: number;
+  status: string;
+  assetCount?: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface QualityGateResult {

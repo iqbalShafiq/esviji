@@ -5,6 +5,7 @@ declare module '@prisma/client' {
     assetIteration: AssetIterationDelegate;
     $connect(): Promise<void>;
     $disconnect(): Promise<void>;
+    $transaction(queries: Promise<unknown>[]): Promise<unknown[]>;
   }
 
   export namespace Prisma {
@@ -73,22 +74,41 @@ declare module '@prisma/client' {
     create(args: { data: Partial<Asset> }): Promise<Asset>;
     findUnique(args: {
       where: { id: string };
-      include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number } };
-    }): Promise<(Asset & { iterations: AssetIteration[] }) | null>;
+      include?: {
+        pack?: boolean;
+        iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number };
+      };
+      select?: Partial<Record<keyof Asset, boolean>>;
+    }): Promise<(Asset & { pack?: AssetPack | null; iterations: AssetIteration[] }) | null>;
     findMany(args?: {
       where?: { packId?: string };
       orderBy?: { createdAt?: 'asc' | 'desc' } | Array<{ createdAt?: 'asc' | 'desc' }>;
-      include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number } };
-    }): Promise<(Asset & { iterations?: AssetIteration[] })[]>;
+      include?: {
+        pack?: boolean;
+        iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number };
+      };
+    }): Promise<(Asset & { pack?: AssetPack | null; iterations?: AssetIteration[] })[]>;
     update(args: { where: { id: string }; data: Partial<Asset> }): Promise<Asset>;
+    delete(args: { where: { id: string } }): Promise<Asset>;
+    count(args?: { where?: { packId?: string | null } }): Promise<number>;
   }
 
   interface AssetPackDelegate {
     create(args: { data: Partial<AssetPack> }): Promise<AssetPack>;
     findUnique(args: {
       where: { id: string };
-      include?: { assets?: boolean };
-    }): Promise<(AssetPack & { assets: Asset[] }) | null>;
+      include?: {
+        assets?:
+          | boolean
+          | { select?: Partial<Record<keyof Asset, boolean>>; include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' } } } };
+      };
+    }): Promise<(AssetPack & { assets: (Asset & { iterations?: AssetIteration[] })[] }) | null>;
+    findMany(args?: {
+      orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
+      include?: {
+        assets?: boolean | { select?: Partial<Record<keyof Asset, boolean>> };
+      };
+    }): Promise<(AssetPack & { assets: Asset[] })[]>;
     update(args: { where: { id: string }; data: Partial<AssetPack> }): Promise<AssetPack>;
   }
 
@@ -98,5 +118,6 @@ declare module '@prisma/client' {
       where?: { assetId?: string };
       orderBy?: { iterationNumber?: 'desc' | 'asc' };
     }): Promise<AssetIteration[]>;
+    deleteMany(args: { where: { assetId: string } }): Promise<{ count: number }>;
   }
 }

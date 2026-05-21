@@ -5,6 +5,14 @@ export async function registerSvgPackRoutes(
   app: FastifyInstance,
   controller: SvgPacksController
 ): Promise<void> {
+  app.get('/api/packs', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.list(request, reply);
+  });
+
+  app.post('/api/packs', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.create(request as Parameters<SvgPacksController['create']>[0], reply);
+  });
+
   app.post('/api/assets/svg-pack/build', async (request: FastifyRequest, reply: FastifyReply) => {
     await controller.build(request as Parameters<SvgPacksController['build']>[0], reply);
   });

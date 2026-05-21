@@ -1,6 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
 
-export function TopBar() {
+interface TopBarProps {
+  actions?: ReactNode;
+}
+
+export function TopBar({ actions }: TopBarProps) {
   const location = useLocation();
 
   const navLinks = [
@@ -46,6 +51,7 @@ export function TopBar() {
           })}
         </nav>
       </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
     </header>
   );
 }

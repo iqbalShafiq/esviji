@@ -16,6 +16,7 @@ import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
+import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
 import type {
   AssetResponse,
   PreviewMode,
@@ -62,6 +63,14 @@ export default function AssetBuilderPage() {
     setJobId(id);
     setJob(undefined);
     setAsset(undefined);
+  };
+
+  const handleNewAsset = () => {
+    setAsset(undefined);
+    setJob(undefined);
+    setJobId(undefined);
+    setIsLoading(false);
+    setIsRefining(false);
   };
 
   const handleManualRefine = async (instruction: string) => {
@@ -132,11 +141,20 @@ export default function AssetBuilderPage() {
       <AppShell
         leftPanel={
           <div className="h-full">
-            <AssetBuilderForm
-              onJobCreated={handleJobCreated}
-              onSubmitStart={handleSubmitStart}
-              onBuildError={handleBuildError}
-            />
+            {asset ? (
+              <AssetPackPanel
+                asset={asset}
+                onAssetUpdated={setAsset}
+                onNewAsset={handleNewAsset}
+              />
+            ) : (
+              <AssetBuilderForm
+                onJobCreated={handleJobCreated}
+                onSubmitStart={handleSubmitStart}
+                onBuildError={handleBuildError}
+                isSubmitting={isLoading}
+              />
+            )}
           </div>
         }
         centerPanel={

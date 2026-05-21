@@ -32,6 +32,20 @@ export async function svgAssetsRoutes(
     );
   });
 
+  app.patch('/api/assets/:assetId/pack', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.updatePack(
+      request as Parameters<SvgAssetsController['updatePack']>[0],
+      reply
+    );
+  });
+
+  app.delete('/api/assets/:assetId', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.delete(
+      request as Parameters<SvgAssetsController['delete']>[0],
+      reply
+    );
+  });
+
   app.get('/api/jobs/:jobId', async (request: FastifyRequest, reply: FastifyReply) => {
     await controller.getJob(
       request as Parameters<SvgAssetsController['getJob']>[0],

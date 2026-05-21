@@ -5,6 +5,7 @@ import {
   RenderSvgRequestSchema,
   OptimizeSvgRequestSchema,
 } from '@svg-builder/shared';
+import { z } from 'zod';
 import { prisma } from '../db/prisma.js';
 import type { SvgBuildOrchestrator } from '../orchestrators/SvgBuildOrchestrator.js';
 import type { SvgRenderService } from '../services/SvgRenderService.js';
@@ -283,6 +284,7 @@ export class SvgAssetsController {
       const assets = await prisma.asset.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
+          pack: true,
           iterations: {
             orderBy: { iterationNumber: 'desc' },
             take: 1,
@@ -305,6 +307,18 @@ export class SvgAssetsController {
           currentIteration: asset.currentIteration,
           bestIterationNumber: asset.bestIterationNumber,
           finalPngPath: asset.finalPngPath,
+          packId: asset.packId,
+          pack: asset.pack
+            ? {
+                id: asset.pack.id,
+                prompt: asset.pack.prompt,
+                assetType: asset.pack.assetType,
+                quantity: asset.pack.quantity,
+                status: asset.pack.status,
+                createdAt: asset.pack.createdAt,
+                updatedAt: asset.pack.updatedAt,
+              }
+            : null,
           createdAt: asset.createdAt,
           updatedAt: asset.updatedAt,
           latestScores: latestIteration?.scores ?? {},
@@ -332,7 +346,10 @@ export class SvgAssetsController {
     try {
       const asset = await prisma.asset.findUnique({
         where: { id: assetId },
-        include: { iterations: { orderBy: { iterationNumber: 'asc' } } },
+        include: {
+          pack: true,
+          iterations: { orderBy: { iterationNumber: 'asc' } },
+        },
       });
 
       if (!asset) {
@@ -348,6 +365,17 @@ export class SvgAssetsController {
         success: true,
         data: {
           ...asset,
+          pack: asset.pack
+            ? {
+                id: asset.pack.id,
+                prompt: asset.pack.prompt,
+                assetType: asset.pack.assetType,
+                quantity: asset.pack.quantity,
+                status: asset.pack.status,
+                createdAt: asset.pack.createdAt,
+                updatedAt: asset.pack.updatedAt,
+              }
+            : null,
           currentStage: asset.status === 'completed' ? 'export' : undefined,
           classification: { assetType: asset.assetType },
           brief: asset.iterations[0]?.brief,
@@ -367,6 +395,150 @@ export class SvgAssetsController {
         statusCode: 500,
         error: 'Internal Server Error',
         message: error instanceof Error ? error.message : 'Failed to get asset',
+      });
+    }
+  }
+
+  async updatePack(
+    request: FastifyRequest<{ Params: { assetId: string }; Body: unknown }>,
+    reply: FastifyReply
+  ): Promise<void> {
+    const { assetId } = request.params;
+    const parseResult = UpdateAssetPackRequestSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      reply.status(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Invalid request body',
+        details: parseResult.error.format(),
+      });
+      return;
+    }
+
+    const { packId } = parseResult.data;
+
+    try {
+      const existingAsset = await prisma.asset.findUnique({
+        where: { id: assetId },
+        select: { packId: true },
+      });
+
+      if (!existingAsset) {
+        reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Asset not found: ${assetId}`,
+        });
+        return;
+      }
+
+      if (packId) {
+        const pack = await prisma.assetPack.findUnique({ where: { id: packId } });
+        if (!pack) {
+          reply.status(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: `Pack not found: ${packId}`,
+          });
+          return;
+        }
+      }
+
+      await prisma.asset.update({
+        where: { id: assetId },
+        data: { packId },
+      });
+
+      const affectedPackIds = Array.from(
+        new Set([existingAsset.packId, packId].filter((id): id is string => Boolean(id)))
+      );
+      await Promise.all(affectedPackIds.map((id) => updatePackQuantity(id)));
+
+      const asset = await prisma.asset.findUnique({
+        where: { id: assetId },
+        include: {
+          pack: true,
+          iterations: { orderBy: { iterationNumber: 'asc' } },
+        },
+      });
+
+      reply.status(200).send({
+        success: true,
+        data: asset
+          ? {
+              ...asset,
+              pack: asset.pack
+                ? {
+                    id: asset.pack.id,
+                    prompt: asset.pack.prompt,
+                    assetType: asset.pack.assetType,
+                    quantity: asset.pack.quantity,
+                    status: asset.pack.status,
+                    createdAt: asset.pack.createdAt,
+                    updatedAt: asset.pack.updatedAt,
+                  }
+                : null,
+              currentStage: asset.status === 'completed' ? 'export' : undefined,
+              classification: { assetType: asset.assetType },
+              brief: asset.iterations[0]?.brief,
+              styleSystem: asset.iterations[0]?.styleSystem,
+              layoutBlueprint: asset.iterations[0]?.layout,
+              evaluation: {
+                scores: asset.finalScores ?? asset.iterations[asset.iterations.length - 1]?.scores ?? {},
+                issues: asset.iterations[asset.iterations.length - 1]?.issues ?? [],
+                continueIteration: false,
+              },
+              qualityGates: this.buildQualityGates(asset),
+            }
+          : null,
+      });
+    } catch (error) {
+      logger.error({ error, assetId, packId }, 'Failed to update asset pack');
+      reply.status(500).send({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Failed to update asset pack',
+      });
+    }
+  }
+
+  async delete(
+    request: FastifyRequest<{ Params: { assetId: string } }>,
+    reply: FastifyReply
+  ): Promise<void> {
+    const { assetId } = request.params;
+
+    try {
+      const asset = await prisma.asset.findUnique({
+        where: { id: assetId },
+        select: { id: true, packId: true },
+      });
+
+      if (!asset) {
+        reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Asset not found: ${assetId}`,
+        });
+        return;
+      }
+
+      await prisma.$transaction([
+        prisma.assetIteration.deleteMany({ where: { assetId } }),
+        prisma.asset.delete({ where: { id: assetId } }),
+      ]);
+
+      if (asset.packId) {
+        await updatePackQuantity(asset.packId);
+      }
+
+      reply.status(200).send({ success: true, data: { id: assetId } });
+    } catch (error) {
+      logger.error({ error, assetId }, 'Failed to delete asset');
+      reply.status(500).send({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Failed to delete asset',
       });
     }
   }
@@ -393,6 +565,18 @@ export class SvgAssetsController {
       { name: 'Asset thresholds passed', passed: meetsThresholds },
     ];
   }
+}
+
+const UpdateAssetPackRequestSchema = z.object({
+  packId: z.string().min(1).nullable(),
+});
+
+async function updatePackQuantity(packId: string): Promise<void> {
+  const count = await prisma.asset.count({ where: { packId } });
+  await prisma.assetPack.update({
+    where: { id: packId },
+    data: { quantity: count },
+  });
 }
 
 function shouldClearStageOutput(message: string): boolean {
