@@ -17,7 +17,11 @@ import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { JsonInspector } from "../components/builder/JsonInspector.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { getAsset, iterateSvgAsset } from "../lib/api.js";
-import type { PreviewMode, BackgroundMode, PreviewSize } from "../types/index.js";
+import type {
+  PreviewMode,
+  BackgroundMode,
+  PreviewSize,
+} from "../types/index.js";
 
 export default function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>();
@@ -26,7 +30,11 @@ export default function AssetDetailPage() {
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
   const [isRefining, setIsRefining] = useState(false);
 
-  const { data: asset, isLoading, refetch } = useQuery({
+  const {
+    data: asset,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ["asset", assetId],
     queryFn: () => getAsset(assetId!),
     enabled: !!assetId,
@@ -59,11 +67,17 @@ export default function AssetDetailPage() {
               <>
                 <div
                   className="p-4 border flex flex-col gap-2"
-                  style={{ borderColor: "var(--line)", background: "var(--surface)" }}
+                  style={{
+                    borderColor: "var(--line)",
+                    background: "var(--surface)",
+                  }}
                 >
                   <h2
                     className="text-sm font-semibold"
-                    style={{ color: "var(--ink)", fontFamily: "var(--font-display)" }}
+                    style={{
+                      color: "var(--ink)",
+                      fontFamily: "var(--font-display)",
+                    }}
                   >
                     {asset.prompt}
                   </h2>
@@ -126,7 +140,10 @@ export default function AssetDetailPage() {
 
             {!asset && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full text-center gap-2">
-                <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+                <p
+                  className="text-sm font-medium"
+                  style={{ color: "var(--muted)" }}
+                >
                   Asset not found
                 </p>
               </div>
@@ -176,19 +193,10 @@ export default function AssetDetailPage() {
                   <QualityGates gates={asset.qualityGates} />
                 )}
                 <IterationTimeline iterations={asset.iterations} />
-                <IssuesPanel issues={asset.evaluation?.issues} iterationLabel="latest/final iteration" />
-                {asset.classification && (
-                  <JsonInspector data={asset.classification} title="Classification" />
-                )}
-                {asset.brief && (
-                  <JsonInspector data={asset.brief} title="Brief" />
-                )}
-                {asset.styleSystem && (
-                  <JsonInspector data={asset.styleSystem} title="Style System" />
-                )}
-                {asset.layoutBlueprint && (
-                  <JsonInspector data={asset.layoutBlueprint} title="Layout" />
-                )}
+                <IssuesPanel
+                  issues={asset.evaluation?.issues}
+                  iterationLabel="latest/final iteration"
+                />
                 <JsonInspector data={asset} title="Raw Response" />
               </>
             )}

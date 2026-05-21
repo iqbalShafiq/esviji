@@ -14,10 +14,15 @@ import { QualityGates } from "../components/builder/QualityGates.js";
 import { IterationTimeline } from "../components/builder/IterationTimeline.js";
 import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
-import { JsonInspector } from "../components/builder/JsonInspector.js";
 import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
-import type { AssetResponse, PreviewMode, BackgroundMode, PreviewSize, JobResponse } from "../types/index.js";
+import type {
+  AssetResponse,
+  PreviewMode,
+  BackgroundMode,
+  PreviewSize,
+  JobResponse,
+} from "../types/index.js";
 import { getAsset, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
 
 export default function AssetBuilderPage() {
@@ -94,10 +99,14 @@ export default function AssetBuilderPage() {
         setIsLoading(false);
       },
       onModelToken: ({ stage, content }) => {
-        setJob((current) => appendJobStream(current, "stageStreams", stage, content));
+        setJob((current) =>
+          appendJobStream(current, "stageStreams", stage, content),
+        );
       },
       onReasoning: ({ stage, content }) => {
-        setJob((current) => appendJobStream(current, "stageReasoningStreams", stage, content));
+        setJob((current) =>
+          appendJobStream(current, "stageReasoningStreams", stage, content),
+        );
       },
       onTool: (event) => {
         setJob((current) => appendJobToolEvent(current, event));
@@ -132,7 +141,13 @@ export default function AssetBuilderPage() {
         }
         centerPanel={
           <PreviewWorkspace
-            pipelineRail={<PipelineRail asset={asset} currentStage={job?.currentStage} failed={job?.status === 'failed'} />}
+            pipelineRail={
+              <PipelineRail
+                asset={asset}
+                currentStage={job?.currentStage}
+                failed={job?.status === "failed"}
+              />
+            }
             canvas={
               <PreviewCanvas
                 asset={asset}
@@ -185,19 +200,10 @@ export default function AssetBuilderPage() {
                   <QualityGates gates={asset.qualityGates} />
                 )}
                 <IterationTimeline iterations={asset.iterations} />
-                <IssuesPanel issues={asset.evaluation?.issues} iterationLabel="latest/final iteration" />
-                {asset.classification && (
-                  <JsonInspector data={asset.classification} title="Classification" />
-                )}
-                {asset.brief && (
-                  <JsonInspector data={asset.brief} title="Brief" />
-                )}
-                {asset.styleSystem && (
-                  <JsonInspector data={asset.styleSystem} title="Style System" />
-                )}
-                {asset.layoutBlueprint && (
-                  <JsonInspector data={asset.layoutBlueprint} title="Layout" />
-                )}
+                <IssuesPanel
+                  issues={asset.evaluation?.issues}
+                  iterationLabel="latest/final iteration"
+                />
               </>
             )}
             {hasPipelineData(job) && (
@@ -213,10 +219,16 @@ export default function AssetBuilderPage() {
             )}
             {!asset && (
               <div className="flex flex-col items-center justify-center h-full text-center gap-2">
-                <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+                <p
+                  className="text-sm font-medium"
+                  style={{ color: "var(--muted)" }}
+                >
                   Inspector
                 </p>
-                <p className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                <p
+                  className="text-xs font-mono"
+                  style={{ color: "var(--muted)" }}
+                >
                   Generate an asset to see evaluation details
                 </p>
               </div>
@@ -228,7 +240,10 @@ export default function AssetBuilderPage() {
   );
 }
 
-function clearJobStream(job: JobResponse | undefined, stage: string): JobResponse | undefined {
+function clearJobStream(
+  job: JobResponse | undefined,
+  stage: string,
+): JobResponse | undefined {
   if (!job) return job;
   return {
     ...job,
@@ -247,7 +262,7 @@ function appendJobStream(
   job: JobResponse | undefined,
   key: "stageStreams" | "stageReasoningStreams",
   stage: string,
-  content: string
+  content: string,
 ): JobResponse | undefined {
   if (!job) return job;
   const streams = job[key] ?? {};
@@ -262,7 +277,7 @@ function appendJobStream(
 
 function appendJobToolEvent(
   job: JobResponse | undefined,
-  event: NonNullable<JobResponse["streamEvents"]>[number]
+  event: NonNullable<JobResponse["streamEvents"]>[number],
 ): JobResponse | undefined {
   if (!job) return job;
   const streamEvents = job.streamEvents ?? [];

@@ -228,7 +228,14 @@ export interface AssetListItem {
 
 export async function listAssets(): Promise<AssetListItem[]> {
   const res = await api.get<ApiEnvelope<AssetListItem[]>>('/api/assets');
-  return unwrapEnvelope(res.data);
+  const assets = unwrapEnvelope(res.data);
+  return assets.map((asset) => ({
+    ...asset,
+    finalPngPath: asset.finalPngPath ? resolveApiAssetUrl(asset.finalPngPath) : asset.finalPngPath,
+    latestPngPreviewPath: asset.latestPngPreviewPath
+      ? resolveApiAssetUrl(asset.latestPngPreviewPath)
+      : asset.latestPngPreviewPath,
+  }));
 }
 
 export async function getAsset(assetId: string): Promise<AssetResponse> {

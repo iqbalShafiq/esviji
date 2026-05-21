@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listAssets } from "../lib/api.js";
 import type { AssetListItem } from "../lib/api.js";
+import { StudioFrame } from "../components/layout/StudioFrame.js";
 
 function AssetHistoryCard({ asset }: { asset: AssetListItem }) {
   const previewUrl = asset.latestPngPreviewPath || asset.finalPngPath || undefined;
@@ -105,76 +106,59 @@ export default function HistoryPage() {
   });
 
   return (
-    <div className="h-full flex flex-col" style={{ background: "var(--bg)" }}>
-      <div className="shrink-0 px-6 py-4 border-b flex items-center justify-between"
-        style={{ borderColor: "var(--line)", background: "var(--surface)" }}
-      >
-        <div>
-          <h1
-            className="text-lg font-semibold"
-            style={{ color: "var(--ink)", fontFamily: "var(--font-display)" }}
-          >
-            Generation History
-          </h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-            All generated SVG assets with their iterations
-          </p>
-        </div>
-        <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
-          {assets?.length ?? 0} assets
+    <StudioFrame>
+      <div className="h-full flex flex-col" style={{ background: "var(--bg)" }}>
+        <div className="flex-1 overflow-y-auto p-6">
+          {isLoading && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-80 animate-pulse"
+                  style={{ background: "var(--surface-2)" }}
+                />
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <div className="flex flex-col items-center justify-center h-full text-center gap-2">
+              <p className="text-sm font-medium" style={{ color: "var(--red)" }}>
+                Failed to load history
+              </p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {error instanceof Error ? error.message : "Unknown error"}
+              </p>
+            </div>
+          )}
+
+          {!isLoading && !error && assets && assets.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center gap-2">
+              <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+                No generated assets yet
+              </p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Generate your first SVG asset to see it here
+              </p>
+              <Link
+                to="/assets/new"
+                className="mt-2 text-xs font-semibold px-4 py-2 transition-colors"
+                style={{ background: "var(--blueprint)", color: "#ffffff" }}
+              >
+                Generate Asset
+              </Link>
+            </div>
+          )}
+
+          {!isLoading && !error && assets && assets.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {assets.map((asset) => (
+                <AssetHistoryCard key={asset.id} asset={asset} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="flex-1 overflow-y-auto p-6">
-        {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-80 animate-pulse"
-                style={{ background: "var(--surface-2)" }}
-              />
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-2">
-            <p className="text-sm font-medium" style={{ color: "var(--red)" }}>
-              Failed to load history
-            </p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              {error instanceof Error ? error.message : "Unknown error"}
-            </p>
-          </div>
-        )}
-
-        {!isLoading && !error && assets && assets.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-2">
-            <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
-              No generated assets yet
-            </p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Generate your first SVG asset to see it here
-            </p>
-            <Link
-              to="/assets/new"
-              className="mt-2 text-xs font-semibold px-4 py-2 transition-colors"
-              style={{ background: "var(--blueprint)", color: "#ffffff" }}
-            >
-              Generate Asset
-            </Link>
-          </div>
-        )}
-
-        {!isLoading && !error && assets && assets.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {assets.map((asset) => (
-              <AssetHistoryCard key={asset.id} asset={asset} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+    </StudioFrame>
   );
 }
