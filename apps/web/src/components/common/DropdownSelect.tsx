@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 export interface DropdownOption {
   value: string;
@@ -14,6 +15,12 @@ interface DropdownSelectProps {
   options: DropdownOption[];
   placeholder?: string;
   disabled?: boolean;
+  trailingAction?: {
+    label: string;
+    icon: ReactNode;
+    disabled?: boolean;
+    onClick: () => void;
+  };
   onValueChange: (value: string) => void;
 }
 
@@ -24,6 +31,7 @@ export function DropdownSelect({
   options,
   placeholder = "Select an option",
   disabled = false,
+  trailingAction,
   onValueChange,
 }: DropdownSelectProps) {
   const generatedId = useId();
@@ -100,52 +108,83 @@ export function DropdownSelect({
           {label}
         </label>
       )}
-      <button
-        ref={buttonRef}
-        id={id}
-        type="button"
-        className="flex w-full items-center justify-between gap-3 border px-3 py-2.5 text-left text-sm transition-all focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+      <div
+        className="flex w-full items-stretch border transition-all"
         style={{
           background: "var(--bg)",
           borderColor: open ? "var(--blueprint)" : "var(--line)",
           color: "var(--ink)",
           boxShadow: open ? "0 0 0 3px rgba(20, 87, 217, 0.10)" : undefined,
         }}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-labelledby={label ? `${id}-label ${id}` : undefined}
-        aria-controls={listboxId}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={handleKeyDown}
       >
-        <span className="min-w-0">
-          <span
-            className="block truncate font-medium"
-            style={{ color: selectedOption ? "var(--ink)" : "var(--muted)" }}
-          >
-            {selectedOption?.label ?? placeholder}
-          </span>
-        </span>
-        <svg
-          aria-hidden="true"
-          className="h-4 w-4 shrink-0 transition-transform duration-150"
-          viewBox="0 0 16 16"
-          fill="none"
-          style={{
-            color: open ? "var(--blueprint)" : "var(--muted)",
-            transform: open ? "rotate(180deg)" : "rotate(0deg)",
-          }}
+        <button
+          ref={buttonRef}
+          id={id}
+          type="button"
+          className="flex min-w-0 flex-1 items-center px-3 py-2.5 text-left text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          style={{ color: "var(--ink)" }}
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-labelledby={label ? `${id}-label ${id}` : undefined}
+          aria-controls={listboxId}
+          onClick={() => setOpen((current) => !current)}
+          onKeyDown={handleKeyDown}
         >
-          <path
-            d="M4 6L8 10L12 6"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+          <span className="min-w-0">
+            <span
+              className="block truncate font-medium"
+              style={{ color: selectedOption ? "var(--ink)" : "var(--muted)" }}
+            >
+              {selectedOption?.label ?? placeholder}
+            </span>
+          </span>
+        </button>
+        {trailingAction && (
+          <button
+            type="button"
+            className="flex w-9 shrink-0 items-center justify-center transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ color: "var(--muted)" }}
+            title={trailingAction.label}
+            aria-label={trailingAction.label}
+            disabled={disabled || trailingAction.disabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpen(false);
+              trailingAction.onClick();
+            }}
+          >
+            {trailingAction.icon}
+          </button>
+        )}
+        <button
+          type="button"
+          className="flex w-9 shrink-0 items-center justify-center transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={disabled}
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <svg
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 transition-transform duration-150"
+            viewBox="0 0 16 16"
+            fill="none"
+            style={{
+              color: open ? "var(--blueprint)" : "var(--muted)",
+              transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            }}
+          >
+            <path
+              d="M4 6L8 10L12 6"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
 
       <div
         id={listboxId}

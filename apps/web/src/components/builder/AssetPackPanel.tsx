@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   assignAssetToPack,
@@ -21,6 +21,7 @@ export function AssetPackPanel({
   onNewAsset,
 }: AssetPackPanelProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedPackId, setSelectedPackId] = useState(asset.packId ?? "");
   const [newPackName, setNewPackName] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
@@ -145,6 +146,14 @@ export function AssetPackPanel({
               })),
             ]}
             disabled={isLoading || isBusy}
+            trailingAction={{
+              label: "Open selected pack",
+              icon: <OpenIcon />,
+              disabled: !selectedPackId,
+              onClick: () => {
+                if (selectedPackId) navigate(`/packs/${selectedPackId}`);
+              },
+            }}
             onValueChange={setSelectedPackId}
           />
           <button
@@ -228,6 +237,32 @@ export function AssetPackPanel({
         </Link>
       </div>
     </div>
+  );
+}
+
+function OpenIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M6 4H4.5C3.67157 4 3 4.67157 3 5.5V11.5C3 12.3284 3.67157 13 4.5 13H10.5C11.3284 13 12 12.3284 12 11.5V10"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.5 3H13V7.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 8.5L12.5 3.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
