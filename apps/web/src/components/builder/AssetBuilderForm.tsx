@@ -57,7 +57,7 @@ const ASSET_TYPE_OPTIONS = [
   {
     value: "",
     label: "Auto Detect",
-    description: "Let VectorLab classify the asset from your prompt",
+    description: "Let Esviji classify the asset from your prompt",
     tone: "blueprint" as const,
   },
   ...ASSET_TYPES.map((type) => ({

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { listPacks } from "../lib/api.js";
+import type { PackThumbnail } from "../types/index.js";
 
 export default function MyPacksPage() {
   const { data: packs = [], isLoading, error } = useQuery({
@@ -66,30 +67,7 @@ export default function MyPacksPage() {
                 className="group flex min-h-[280px] flex-col border p-4 transition-all hover:-translate-y-0.5"
                 style={{ borderColor: "var(--line)", background: "var(--surface)" }}
               >
-                <div className="grid aspect-[16/9] grid-cols-4 grid-rows-2 gap-2 overflow-hidden" style={{ background: "var(--bg)" }}>
-                  {(pack.thumbnails ?? []).slice(0, 8).map((asset, index) => (
-                    <div
-                      key={asset.id}
-                      className={index === 0 ? "col-span-2 row-span-2 flex items-center justify-center" : "flex items-center justify-center"}
-                      style={{ background: "var(--surface-2)" }}
-                    >
-                      {asset.finalPngPath ? (
-                        <img
-                          src={asset.finalPngPath}
-                          alt={asset.name ?? asset.prompt}
-                          className="h-3/4 w-3/4 object-contain transition-transform group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="h-8 w-8" style={{ background: "var(--line)" }} />
-                      )}
-                    </div>
-                  ))}
-                  {(pack.thumbnails?.length ?? 0) === 0 && (
-                    <div className="col-span-4 row-span-2 flex items-center justify-center text-xs font-mono" style={{ color: "var(--muted)" }}>
-                      Empty pack
-                    </div>
-                  )}
-                </div>
+                <PackThumbnailMosaic thumbnails={pack.thumbnails ?? []} />
 
                 <div className="mt-4 flex flex-1 flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
@@ -116,4 +94,91 @@ export default function MyPacksPage() {
       </main>
     </StudioFrame>
   );
+}
+
+function PackThumbnailMosaic({ thumbnails }: { thumbnails: PackThumbnail[] }) {
+  const visible = thumbnails.slice(0, 8);
+  const layout = getMosaicLayout(visible.length);
+
+  if (visible.length === 0) {
+    return (
+      <div className="flex aspect-[16/9] items-center justify-center overflow-hidden text-xs font-mono" style={{ background: "var(--bg)", color: "var(--muted)" }}>
+        Empty pack
+      </div>
+    );
+  }
+
+  return (
+    <div className={`grid aspect-[16/9] gap-2 overflow-hidden ${layout.containerClass}`} style={{ background: "var(--bg)" }}>
+      {visible.map((asset, index) => (
+        <div
+          key={asset.id}
+          className={`flex items-center justify-center ${layout.itemClass(index)}`}
+          style={{ background: "var(--surface-2)" }}
+        >
+          {asset.finalPngPath ? (
+            <img
+              src={asset.finalPngPath}
+              alt={asset.name ?? asset.prompt}
+              className="h-3/4 w-3/4 object-contain transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <div className="h-8 w-8" style={{ background: "var(--line)" }} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getMosaicLayout(count: number): {
+  containerClass: string;
+  itemClass: (index: number) => string;
+} {
+  if (count <= 1) {
+    return {
+      containerClass: "grid-cols-1 grid-rows-1",
+      itemClass: () => "",
+    };
+  }
+
+  if (count === 2) {
+    return {
+      containerClass: "grid-cols-2 grid-rows-1",
+      itemClass: () => "",
+    };
+  }
+
+  if (count === 3) {
+    return {
+      containerClass: "grid-cols-4 grid-rows-2",
+      itemClass: (index) => (index === 0 ? "col-span-2 row-span-2" : "col-span-2"),
+    };
+  }
+
+  if (count === 4) {
+    return {
+      containerClass: "grid-cols-2 grid-rows-2",
+      itemClass: () => "",
+    };
+  }
+
+  if (count === 5) {
+    return {
+      containerClass: "grid-cols-6 grid-rows-2",
+      itemClass: (index) => (index < 2 ? "col-span-3" : "col-span-2"),
+    };
+  }
+
+  if (count === 6) {
+    return {
+      containerClass: "grid-cols-3 grid-rows-2",
+      itemClass: () => "",
+    };
+  }
+
+  return {
+    containerClass: "grid-cols-4 grid-rows-2",
+    itemClass: () => "",
+  };
 }

@@ -399,7 +399,7 @@
 - `apps/web/src/components/layout/StudioFrame.tsx`
 **Steps:**
 1. Create AppShell with 3-column desktop layout (left command panel, center preview, right inspector)
-2. Create TopBar with "VectorLab" branding, navigation links (Asset Builder, Pack Builder, Assets, Packs), provider status badge
+2. Create TopBar with "Esviji" branding, navigation links (Asset Builder, Pack Builder, Assets, Packs), provider status badge
 3. Create StudioFrame wrapper with responsive breakpoints
 4. Setup React Router routes in App.tsx
 

@@ -31,7 +31,7 @@ export function TopBar({ actions }: TopBarProps) {
             color: "var(--ink)",
           }}
         >
-          VectorLab
+          Esviji
         </Link>
         <nav className="hidden sm:flex items-center gap-6">
           {navLinks.map((link) => {

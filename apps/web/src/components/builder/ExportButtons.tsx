@@ -7,15 +7,6 @@ interface ExportButtonsProps {
 }
 
 export function ExportButtons({ assetId, svg, pngUrl }: ExportButtonsProps) {
-  const handleCopySvg = async () => {
-    if (!svg) return;
-    try {
-      await navigator.clipboard.writeText(svg);
-    } catch {
-      // Ignore
-    }
-  };
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {svg && (
