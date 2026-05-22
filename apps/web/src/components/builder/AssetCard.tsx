@@ -6,6 +6,8 @@ interface AssetCardProps {
   asset: AssetResponse;
   isOutlier?: boolean;
   onRefine?: (asset: AssetResponse) => void;
+  onDelete?: (asset: AssetResponse) => void;
+  isDeleting?: boolean;
 }
 
 function getScoreColor(score: number): string {
@@ -29,7 +31,7 @@ function getStatusBadge(status: AssetResponse["status"]) {
   }
 }
 
-export function AssetCard({ asset, isOutlier, onRefine }: AssetCardProps) {
+export function AssetCard({ asset, isOutlier, onRefine, onDelete, isDeleting = false }: AssetCardProps) {
   const avgScore = useMemo(() => {
     if (!asset.evaluation?.scores) return null;
     const values = Object.values(asset.evaluation.scores);
@@ -161,6 +163,26 @@ export function AssetCard({ asset, isOutlier, onRefine }: AssetCardProps) {
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1V9M7 9L4 6M7 9L10 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(asset)}
+              className="ml-auto p-1.5 border transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Delete SVG from pack"
+              disabled={isDeleting}
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--red)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M2 3.5H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M5.5 1.5H8.5M4 3.5L4.5 12H9.5L10 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M6 6V10M8 6V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </button>
           )}

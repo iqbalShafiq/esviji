@@ -18,7 +18,8 @@ import { IterationTimeline } from "../components/builder/IterationTimeline.js";
 import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
-import { clonePack, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility } from "../lib/api.js";
+import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
+import { clonePack, deleteAsset, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility } from "../lib/api.js";
 import type { AssetResponse, BackgroundMode, JobResponse, PreviewMode, PreviewSize } from "../types/index.js";
 import { useAuth } from "../auth/AuthContext.js";
 
@@ -36,6 +37,7 @@ export default function PackDetailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
   const [isLoadingAssetDetail, setIsLoadingAssetDetail] = useState(false);
+  const [assetToDelete, setAssetToDelete] = useState<AssetResponse | undefined>();
 
   const { data: pack, isLoading: isPackLoading, error, refetch } = useQuery({
     queryKey: ["pack", packId],
@@ -54,6 +56,19 @@ export default function PackDetailPage() {
   const cloneMutation = useMutation({
     mutationFn: () => clonePack(packId!),
     onSuccess: (cloned) => navigate(`/packs/${cloned.id}`),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (assetId: string) => deleteAsset(assetId),
+    onSuccess: async ({ id }) => {
+      if (selectedAsset?.id === id) setSelectedAsset(undefined);
+      setAssetToDelete(undefined);
+      await refetch();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["packs", "list"] }),
+        queryClient.invalidateQueries({ queryKey: ["assets", "list"] }),
+      ]);
+    },
   });
 
   const outlierIds = useMemo(() => pack?.outliers?.map((o) => o.assetId) ?? [], [pack?.outliers]);
@@ -139,6 +154,7 @@ export default function PackDetailPage() {
   };
 
   return (
+    <>
     <StudioFrame
       topBarActions={
         <>
@@ -248,6 +264,8 @@ export default function PackDetailPage() {
                   outlierIds={outlierIds}
                   emptyMessage="Add a SVG from the left command panel"
                   onRefine={handleSelectAsset}
+                  onDelete={pack?.isOwner && !isGenerating ? setAssetToDelete : undefined}
+                  deletingAssetId={deleteMutation.isPending ? assetToDelete?.id : undefined}
                 />
               </div>
             </div>
@@ -292,6 +310,21 @@ export default function PackDetailPage() {
         }
       />
     </StudioFrame>
+    <ConfirmationDialog
+      open={Boolean(assetToDelete)}
+      title="Delete SVG from pack?"
+      description={`This will permanently remove "${assetToDelete?.prompt ?? "this SVG"}" from the pack and update the pack item count.`}
+      confirmLabel="Delete SVG"
+      intent="danger"
+      isPending={deleteMutation.isPending}
+      onConfirm={() => {
+        if (assetToDelete) deleteMutation.mutate(assetToDelete.id);
+      }}
+      onOpenChange={(open) => {
+        if (!open && !deleteMutation.isPending) setAssetToDelete(undefined);
+      }}
+    />
+    </>
   );
 }
 

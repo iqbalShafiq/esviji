@@ -172,7 +172,7 @@ test('OpenAiProvider only applies timeout while opening streams, not while consu
     'utf8'
   );
 
-  assert.match(source, /STREAM_START_TIMEOUT_MS\s*=\s*15_000/);
+  assert.match(source, /STREAM_START_TIMEOUT_MS\s*=\s*120_000/);
   assert.match(source, /model\.stream\([\s\S]*STREAM_START_TIMEOUT_MS/);
   assert.doesNotMatch(source, /iterator\.next\(\),\s*STREAM_/);
 });

@@ -169,7 +169,7 @@ export class SvgPacksController {
         owner: pack.owner ? { username: pack.owner.username, email: pack.owner.email } : null,
         sharedStyleSystem: pack.styleSystem,
         zipUrl: pack.zipPath ? `/packs/${pack.id}/pack.zip` : undefined,
-        assets: pack.assets.map((asset: any) => serializePackAsset(asset, user?.id)),
+        assets: pack.assets.map((asset: any) => serializePackAsset(asset, user?.id, pack.ownerId)),
       } });
     } catch (error) {
       logger.error({ error, packId }, 'Failed to get pack');
@@ -233,11 +233,11 @@ const CreatePackRequestSchema = z.object({
 });
 const VisibilitySchema = z.object({ visibility: z.enum(['private', 'public']) });
 
-function serializePackAsset(asset: any, viewerId?: string) {
+function serializePackAsset(asset: any, viewerId?: string, packOwnerId?: string | null) {
   const iterations = asset.iterations ?? [];
   return {
     ...asset,
-    isOwner: Boolean(viewerId && asset.ownerId === viewerId),
+    isOwner: Boolean(viewerId && (asset.ownerId === viewerId || packOwnerId === viewerId)),
     output: { width: asset.width, height: asset.height, formats: ['svg', 'png'] },
     currentStage: asset.status === 'completed' ? 'export' : undefined,
     classification: { assetType: asset.assetType },

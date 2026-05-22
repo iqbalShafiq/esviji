@@ -189,7 +189,7 @@ export class SvgAssetsController {
         orderBy: { createdAt: 'desc' },
         include: { owner: true, pack: true, iterations: { orderBy: { iterationNumber: 'desc' }, take: 1 } },
       });
-      reply.status(200).send({ success: true, data: assets.map((asset: any) => this.serializeListAsset(asset)) });
+      reply.status(200).send({ success: true, data: assets.map((asset: any) => this.serializeListAsset(asset, user?.id)) });
     } catch (error) {
       logger.error({ error }, 'Failed to list assets');
       sendServerError(reply, error, 'Failed to list assets');
@@ -205,7 +205,7 @@ export class SvgAssetsController {
         include: { owner: true, pack: true, iterations: { orderBy: { iterationNumber: 'asc' } } },
       });
       if (!asset) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: `Asset not found: ${assetId}` });
-      if (!canReadOwned(asset, user?.id, user?.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You cannot access this asset' });
+      if (!canReadAsset(asset, user?.id, user?.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You cannot access this asset' });
       reply.status(200).send({ success: true, data: this.serializeAssetDetail(asset, user?.id) });
     } catch (error) {
       logger.error({ error, assetId }, 'Failed to get asset');
@@ -222,9 +222,9 @@ export class SvgAssetsController {
     const { packId } = parseResult.data;
 
     try {
-      const existingAsset = await prisma.asset.findUnique({ where: { id: assetId }, select: { packId: true, ownerId: true } });
+      const existingAsset = await prisma.asset.findUnique({ where: { id: assetId }, select: { packId: true, ownerId: true, pack: { select: { ownerId: true } } } });
       if (!existingAsset) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: `Asset not found: ${assetId}` });
-      if (!canWriteOwned(existingAsset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only update assets you own' });
+      if (!canWriteAsset(existingAsset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only update assets you own' });
       if (packId) {
         const pack = await prisma.assetPack.findUnique({ where: { id: packId }, select: { id: true, ownerId: true } });
         if (!pack) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: `Pack not found: ${packId}` });
@@ -246,9 +246,9 @@ export class SvgAssetsController {
     if (!user) return;
     const parsed = VisibilitySchema.safeParse(request.body);
     if (!parsed.success) return sendValidationError(reply, parsed.error.format());
-    const asset = await prisma.asset.findUnique({ where: { id: request.params.assetId }, select: { ownerId: true } });
+    const asset = await prisma.asset.findUnique({ where: { id: request.params.assetId }, select: { ownerId: true, pack: { select: { ownerId: true } } } });
     if (!asset) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: 'Asset not found' });
-    if (!canWriteOwned(asset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only update assets you own' });
+    if (!canWriteAsset(asset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only update assets you own' });
     const updated = await prisma.asset.update({ where: { id: request.params.assetId }, data: { visibility: parsed.data.visibility } });
     reply.status(200).send({ success: true, data: updated });
   }
@@ -291,9 +291,9 @@ export class SvgAssetsController {
     if (!user) return;
     const { assetId } = request.params;
     try {
-      const asset = await prisma.asset.findUnique({ where: { id: assetId }, select: { id: true, packId: true, ownerId: true } });
+      const asset = await prisma.asset.findUnique({ where: { id: assetId }, select: { id: true, packId: true, ownerId: true, pack: { select: { ownerId: true } } } });
       if (!asset) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: `Asset not found: ${assetId}` });
-      if (!canWriteOwned(asset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only delete assets you own' });
+      if (!canWriteAsset(asset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only delete assets you own' });
       await prisma.$transaction([prisma.assetIteration.deleteMany({ where: { assetId } }), prisma.asset.delete({ where: { id: assetId } })]);
       if (asset.packId) await updatePackQuantity(asset.packId);
       reply.status(200).send({ success: true, data: { id: assetId } });
@@ -312,13 +312,13 @@ export class SvgAssetsController {
     }
   }
 
-  private serializeListAsset(asset: any) {
+  private serializeListAsset(asset: any, viewerId?: string) {
     const latestIteration = asset.iterations?.[0];
     return {
       id: asset.id,
       ownerId: asset.ownerId,
       owner: asset.owner ? { username: asset.owner.username, email: asset.owner.email } : null,
-      isOwner: false,
+      isOwner: isAssetOwnerForViewer(asset, viewerId),
       name: asset.name,
       prompt: asset.prompt,
       assetType: asset.assetType,
@@ -343,7 +343,7 @@ export class SvgAssetsController {
   private serializeAssetDetail(asset: any, viewerId?: string) {
     return {
       ...asset,
-      isOwner: Boolean(viewerId && asset.ownerId === viewerId),
+      isOwner: isAssetOwnerForViewer(asset, viewerId),
       owner: asset.owner ? { username: asset.owner.username, email: asset.owner.email } : null,
       pack: asset.pack ? { id: asset.pack.id, prompt: asset.pack.prompt, assetType: asset.pack.assetType, quantity: asset.pack.quantity, status: asset.pack.status, visibility: asset.pack.visibility, createdAt: asset.pack.createdAt, updatedAt: asset.pack.updatedAt } : null,
       currentStage: asset.status === 'completed' ? 'export' : undefined,
@@ -383,7 +383,7 @@ async function updatePackQuantity(packId: string): Promise<void> {
 
 function visibilityWhere(userId?: string, role?: string) {
   if (role === 'admin') return undefined;
-  return userId ? { OR: [{ ownerId: userId }, { visibility: 'public' }] } : { visibility: 'public' };
+  return userId ? { OR: [{ ownerId: userId }, { visibility: 'public' }, { pack: { is: { ownerId: userId } } }] } : { visibility: 'public' };
 }
 
 function canReadOwned(entity: { ownerId: string | null; visibility: string }, userId?: string, role?: string): boolean {
@@ -392,6 +392,18 @@ function canReadOwned(entity: { ownerId: string | null; visibility: string }, us
 
 function canWriteOwned(entity: { ownerId: string | null }, userId: string, role?: string): boolean {
   return role === 'admin' || entity.ownerId === userId;
+}
+
+function canReadAsset(entity: { ownerId: string | null; visibility: string; pack?: { ownerId: string | null } | null }, userId?: string, role?: string): boolean {
+  return canReadOwned(entity, userId, role) || Boolean(userId && entity.pack?.ownerId === userId);
+}
+
+function canWriteAsset(entity: { ownerId: string | null; pack?: { ownerId: string | null } | null }, userId: string, role?: string): boolean {
+  return canWriteOwned(entity, userId, role) || entity.pack?.ownerId === userId;
+}
+
+function isAssetOwnerForViewer(asset: { ownerId: string | null; pack?: { ownerId: string | null } | null }, viewerId?: string): boolean {
+  return Boolean(viewerId && (asset.ownerId === viewerId || asset.pack?.ownerId === viewerId));
 }
 
 function sendValidationError(reply: FastifyReply, details: unknown): void {
