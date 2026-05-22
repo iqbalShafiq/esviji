@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../components/layout/AppShell.js";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { AssetGrid } from "../components/builder/AssetGrid.js";
@@ -18,12 +18,15 @@ import { IterationTimeline } from "../components/builder/IterationTimeline.js";
 import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
-import { getAsset, getPack, iterateSvgAsset, subscribeJobStream } from "../lib/api.js";
+import { clonePack, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility } from "../lib/api.js";
 import type { AssetResponse, BackgroundMode, JobResponse, PreviewMode, PreviewSize } from "../types/index.js";
+import { useAuth } from "../auth/AuthContext.js";
 
 export default function PackDetailPage() {
   const { packId } = useParams<{ packId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [selectedAsset, setSelectedAsset] = useState<AssetResponse | undefined>();
   const [jobId, setJobId] = useState<string | undefined>();
   const [job, setJob] = useState<JobResponse | undefined>();
@@ -38,6 +41,19 @@ export default function PackDetailPage() {
     queryKey: ["pack", packId],
     queryFn: () => getPack(packId!),
     enabled: !!packId,
+  });
+
+  const visibilityMutation = useMutation({
+    mutationFn: (visibility: "private" | "public") => updatePackVisibility(packId!, visibility),
+    onSuccess: async () => {
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+    },
+  });
+
+  const cloneMutation = useMutation({
+    mutationFn: () => clonePack(packId!),
+    onSuccess: (cloned) => navigate(`/packs/${cloned.id}`),
   });
 
   const outlierIds = useMemo(() => pack?.outliers?.map((o) => o.assetId) ?? [], [pack?.outliers]);
@@ -68,6 +84,7 @@ export default function PackDetailPage() {
             setSelectedAsset(nextPack.data?.assets[0]);
           }
           await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+          await refreshUser({ silent: true });
           setIsLoading(false);
         }
 
@@ -91,7 +108,7 @@ export default function PackDetailPage() {
     });
 
     return () => unsubscribe();
-  }, [jobId, queryClient, refetch]);
+  }, [jobId, queryClient, refetch, refreshUser]);
 
   const handleManualRefine = async (instruction: string) => {
     if (!activeAsset) return;
@@ -100,6 +117,7 @@ export default function PackDetailPage() {
       const updated = await iterateSvgAsset({ assetId: activeAsset.id, instruction });
       setSelectedAsset(updated);
       await refetch();
+      await refreshUser({ silent: true });
     } finally {
       setIsRefining(false);
     }
@@ -123,9 +141,21 @@ export default function PackDetailPage() {
   return (
     <StudioFrame
       topBarActions={
-        <Link to="/packs" className="px-3 py-2 text-xs font-semibold transition-colors" style={{ background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line)" }}>
-          My Packs
-        </Link>
+        <>
+          {pack?.isOwner && (
+            <button type="button" className="px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50" style={{ background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line)" }} disabled={visibilityMutation.isPending} onClick={() => visibilityMutation.mutate(pack.visibility === "public" ? "private" : "public")}>
+              {pack.visibility === "public" ? "Make Private" : "Make Public"}
+            </button>
+          )}
+          {pack && !pack.isOwner && pack.visibility === "public" && (
+            <button type="button" className="px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50" style={{ background: "var(--blueprint)", color: "#fff" }} disabled={cloneMutation.isPending} onClick={() => cloneMutation.mutate()}>
+              Clone Pack
+            </button>
+          )}
+          <Link to="/packs" className="px-3 py-2 text-xs font-semibold transition-colors" style={{ background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line)" }}>
+            My Packs
+          </Link>
+        </>
       }
     >
       <AppShell

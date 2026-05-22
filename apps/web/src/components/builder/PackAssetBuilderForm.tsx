@@ -29,6 +29,7 @@ export function PackAssetBuilderForm({
       formats: ["svg", "png"],
     },
     maxIterations: 4,
+    visibility: pack.visibility ?? "private",
   });
 
   const mutation = useMutation({

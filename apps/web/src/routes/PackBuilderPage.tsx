@@ -9,6 +9,7 @@ import { PackConsistencyPanel } from "../components/builder/PackConsistencyPanel
 import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import type { PackResponse, AssetResponse, JobResponse } from "../types/index.js";
 import { getPack, subscribeJobStream } from "../lib/api.js";
+import { useAuth } from "../auth/AuthContext.js";
 
 export default function PackBuilderPage() {
   const [pack, setPack] = useState<PackResponse | undefined>();
@@ -16,6 +17,7 @@ export default function PackBuilderPage() {
   const [job, setJob] = useState<JobResponse | undefined>();
   const [, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
 
   const handleSubmitStart = () => {
     setIsLoading(true);
@@ -41,6 +43,7 @@ export default function PackBuilderPage() {
         if (incomingJob.status === "completed" && incomingJob.packId) {
           const p = await getPack(incomingJob.packId);
           setPack(p);
+          await refreshUser({ silent: true });
           setIsLoading(false);
         }
 
@@ -68,7 +71,7 @@ export default function PackBuilderPage() {
     return () => {
       unsubscribe();
     };
-  }, [jobId]);
+  }, [jobId, refreshUser]);
 
   const handleRefine = (asset: AssetResponse) => {
     navigate(`/assets/${asset.id}`);

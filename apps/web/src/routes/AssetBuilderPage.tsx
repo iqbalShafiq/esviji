@@ -19,6 +19,7 @@ import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
 import { DropdownSelect } from "../components/common/DropdownSelect.js";
+import { useAuth } from "../auth/AuthContext.js";
 import type {
   AssetResponse,
   PreviewMode,
@@ -31,6 +32,7 @@ import { getAsset, iterateSvgAsset, listPacks, subscribeJobStream } from "../lib
 export default function AssetBuilderPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const loadAssetId = searchParams.get("load");
 
   const [asset, setAsset] = useState<AssetResponse | undefined>();
@@ -89,6 +91,7 @@ export default function AssetBuilderPage() {
         instruction,
       });
       setAsset(result);
+      await refreshUser({ silent: true });
     } finally {
       setIsRefining(false);
     }
@@ -104,6 +107,7 @@ export default function AssetBuilderPage() {
         if (incomingJob.status === "completed" && incomingJob.assetId) {
           const result = await getAsset(incomingJob.assetId);
           setAsset({ ...result, currentStage: incomingJob.currentStage });
+          await refreshUser({ silent: true });
           setIsLoading(false);
         }
 
@@ -135,7 +139,7 @@ export default function AssetBuilderPage() {
     return () => {
       unsubscribe();
     };
-  }, [jobId]);
+  }, [jobId, refreshUser]);
 
   useEffect(() => {
     if (job?.status === "failed") {

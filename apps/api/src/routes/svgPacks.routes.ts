@@ -30,4 +30,18 @@ export async function registerSvgPackRoutes(
       reply
     );
   });
+
+  app.patch('/api/packs/:packId/visibility', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.updateVisibility(
+      request as Parameters<SvgPacksController['updateVisibility']>[0],
+      reply
+    );
+  });
+
+  app.post('/api/packs/:packId/clone', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.clone(
+      request as Parameters<SvgPacksController['clone']>[0],
+      reply
+    );
+  });
 }

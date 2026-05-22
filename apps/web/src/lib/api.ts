@@ -9,6 +9,7 @@ import type {
   OptimizeSvgRequest,
 } from "@svg-builder/shared";
 import type { AssetResponse, PackResponse, JobResponse, PackSummary } from "../types/index.js";
+import type { AuthUser } from "../auth/AuthContext.js";
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -36,6 +37,9 @@ type RawAsset = {
   assetType?: string;
   mode?: string;
   style?: string;
+  visibility?: "private" | "public";
+  isOwner?: boolean;
+  owner?: { username: string; email: string } | null;
   output?: { width?: number; height?: number; formats?: string[] };
   width?: number;
   height?: number;
@@ -64,6 +68,72 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+export function setAuthToken(token?: string): void {
+  if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
+  else delete api.defaults.headers.common.Authorization;
+}
+
+export async function registerUser(data: {
+  username: string;
+  email: string;
+  password: string;
+}): Promise<{ token: string; user: AuthUser }> {
+  const res = await api.post<ApiEnvelope<{ token: string; user: AuthUser }>>("/api/auth/register", data);
+  return unwrapEnvelope(res.data);
+}
+
+export async function loginUser(data: {
+  identifier: string;
+  password: string;
+}): Promise<{ token: string; user: AuthUser }> {
+  const res = await api.post<ApiEnvelope<{ token: string; user: AuthUser }>>("/api/auth/login", data);
+  return unwrapEnvelope(res.data);
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const res = await api.get<ApiEnvelope<AuthUser>>("/api/auth/me");
+  return unwrapEnvelope(res.data);
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  tokenBalance: number;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { assets: number; packs: number };
+}
+
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  const res = await api.get<ApiEnvelope<AdminUser[]>>("/api/admin/users");
+  return unwrapEnvelope(res.data);
+}
+
+export async function updateAdminUserTokens(userId: string, tokenBalance: number): Promise<AdminUser> {
+  const res = await api.patch<ApiEnvelope<AdminUser>>(`/api/admin/users/${userId}/tokens`, { tokenBalance });
+  return unwrapEnvelope(res.data);
+}
+
+export async function updateAssetVisibility(assetId: string, visibility: "private" | "public"): Promise<void> {
+  await api.patch(`/api/assets/${assetId}/visibility`, { visibility });
+}
+
+export async function updatePackVisibility(packId: string, visibility: "private" | "public"): Promise<void> {
+  await api.patch(`/api/packs/${packId}/visibility`, { visibility });
+}
+
+export async function cloneAsset(assetId: string): Promise<{ id: string }> {
+  const res = await api.post<ApiEnvelope<{ id: string }>>(`/api/assets/${assetId}/clone`);
+  return unwrapEnvelope(res.data);
+}
+
+export async function clonePack(packId: string): Promise<{ id: string }> {
+  const res = await api.post<ApiEnvelope<{ id: string }>>(`/api/packs/${packId}/clone`);
+  return unwrapEnvelope(res.data);
+}
 
 export async function buildSvgAsset(
   data: BuildSvgAssetRequest
@@ -375,6 +445,9 @@ function normalizeAsset(raw: RawAsset, finalSvg?: string): AssetResponse {
     assetType: raw.assetType ?? "icon",
     mode: raw.mode ?? "direct",
     style: raw.style,
+    visibility: raw.visibility,
+    isOwner: raw.isOwner,
+    owner: raw.owner,
     output: {
       width: raw.output?.width ?? raw.width ?? 512,
       height: raw.output?.height ?? raw.height ?? 512,

@@ -125,6 +125,10 @@ function getStageStatus(
     return "pending";
   }
 
+  if (asset?.status === "completed" && !failed) {
+    return "completed";
+  }
+
   const currentIdx = effectiveStage
     ? PIPELINE_STAGES.indexOf(effectiveStage as (typeof PIPELINE_STAGES)[number])
     : -1;

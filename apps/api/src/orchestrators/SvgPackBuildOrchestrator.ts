@@ -29,6 +29,8 @@ export class SvgPackBuildOrchestrator {
   async build(
     request: BuildSvgPackRequest,
     options?: {
+      ownerId?: string;
+      visibility?: string;
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
       onReasoning?: (stage: import('@svg-builder/shared').PipelineStage, message: string) => void;
@@ -41,8 +43,10 @@ export class SvgPackBuildOrchestrator {
     // Step 1: Create AssetPack record in DB with status "processing"
     const pack = await this.prisma.assetPack.create({
       data: {
+        ownerId: options?.ownerId,
         prompt: request.prompt,
         assetType: request.assetType,
+        visibility: options?.visibility ?? request.visibility ?? 'private',
         quantity: request.quantity,
         style: request.style,
         status: 'processing',
@@ -142,12 +146,15 @@ export class SvgPackBuildOrchestrator {
           style: request.style,
           output: request.output,
           maxIterations: request.maxIterations,
+          visibility: request.visibility ?? options?.visibility ?? 'private',
         };
 
         const asset = await this.svgBuildOrchestrator.build(assetRequest, {
           sharedStyleSystem: styleSystem,
           packId: pack.id,
           name: item.name,
+          ownerId: options?.ownerId,
+          visibility: options?.visibility ?? request.visibility ?? 'private',
           onStage: (stage, message, progress) => {
             const adjusted = Math.min(85, 40 + Math.floor(progress * 0.45));
             options?.onStage?.(stage, `[${item.name}] ${message}`, adjusted);
@@ -295,6 +302,8 @@ export class SvgPackBuildOrchestrator {
     packId: string,
     request: BuildSvgPackAssetRequest,
     options?: {
+      ownerId?: string;
+      visibility?: string;
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
       onIterationRendered?: (iteration: number, previewUrl: string) => void;
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
@@ -336,6 +345,7 @@ export class SvgPackBuildOrchestrator {
         output: request.output,
         referenceImageUrl: request.referenceImageUrl,
         maxIterations: request.maxIterations,
+          visibility: request.visibility ?? options?.visibility ?? 'private',
       },
       {
         sharedStyleSystem: styleSystem,
@@ -418,6 +428,8 @@ export class SvgPackBuildOrchestrator {
     options?: {
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
       onReasoning?: (stage: import('@svg-builder/shared').PipelineStage, message: string) => void;
+      ownerId?: string;
+      visibility?: string;
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
     }
   ): Promise<void> {

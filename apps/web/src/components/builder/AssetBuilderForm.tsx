@@ -89,6 +89,21 @@ const MODE_OPTIONS = [
   },
 ];
 
+const VISIBILITY_OPTIONS = [
+  {
+    value: "private",
+    label: "Private",
+    description: "Only you can view, refine, and manage this SVG",
+    tone: "default" as const,
+  },
+  {
+    value: "public",
+    label: "Public Cloneable",
+    description: "Other users can clone it and refine their own copy",
+    tone: "cyan" as const,
+  },
+];
+
 const ASSET_BUILDER_DRAFT_KEY = "vectorlab.assetBuilderDraft.v1";
 
 export function AssetBuilderForm({
@@ -109,6 +124,7 @@ export function AssetBuilderForm({
     },
     referenceImageUrl: "",
     maxIterations: PRESET_CONFIG.balanced.maxIterations,
+    visibility: "private",
   });
   const [preset, setPreset] = useState<QualityPreset>(() => readDraft()?.preset ?? "balanced");
 
@@ -336,6 +352,18 @@ export function AssetBuilderForm({
             value={form.maxIterations}
             onChange={(e) =>
               updateField("maxIterations", Number(e.target.value))
+            }
+          />
+        </div>
+
+        <div className="mt-4">
+          <DropdownSelect
+            id="asset-visibility"
+            label="Visibility"
+            value={form.visibility ?? "private"}
+            options={VISIBILITY_OPTIONS}
+            onValueChange={(value) =>
+              updateField("visibility", value as BuildSvgAssetRequest["visibility"])
             }
           />
         </div>

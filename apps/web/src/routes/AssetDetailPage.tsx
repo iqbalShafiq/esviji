@@ -17,18 +17,20 @@ import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
-import { deleteAsset, getAsset, iterateSvgAsset } from "../lib/api.js";
+import { cloneAsset, deleteAsset, getAsset, iterateSvgAsset, updateAssetVisibility } from "../lib/api.js";
 import type { AssetResponse } from "../types/index.js";
 import type {
   PreviewMode,
   BackgroundMode,
   PreviewSize,
 } from "../types/index.js";
+import { useAuth } from "../auth/AuthContext.js";
 
 export default function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { refreshUser } = useAuth();
   const [mode, setMode] = useState<PreviewMode>("final");
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
@@ -54,6 +56,16 @@ export default function AssetDetailPage() {
     },
   });
 
+  const visibilityMutation = useMutation({
+    mutationFn: (visibility: "private" | "public") => updateAssetVisibility(assetId!, visibility),
+    onSuccess: async () => refetch(),
+  });
+
+  const cloneMutation = useMutation({
+    mutationFn: () => cloneAsset(assetId!),
+    onSuccess: (cloned) => navigate(`/assets/${cloned.id}`),
+  });
+
   // Reset preview when asset changes
   useEffect(() => {
     setMode("final");
@@ -67,6 +79,7 @@ export default function AssetDetailPage() {
     try {
       await iterateSvgAsset({ assetId: asset.id, instruction });
       await refetch();
+      await refreshUser({ silent: true });
     } finally {
       setIsRefining(false);
     }
@@ -80,15 +93,35 @@ export default function AssetDetailPage() {
     <StudioFrame
       topBarActions={
         asset ? (
-          <button
-            type="button"
-            className="px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ background: "var(--red)", color: "#ffffff" }}
-            disabled={deleteMutation.isPending}
-            onClick={() => setIsDeleteDialogOpen(true)}
-          >
-            Delete
-          </button>
+          <>
+            {asset.isOwner && (
+              <button
+                type="button"
+                className="px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50"
+                style={{ background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line)" }}
+                disabled={visibilityMutation.isPending}
+                onClick={() => visibilityMutation.mutate(asset.visibility === "public" ? "private" : "public")}
+              >
+                {asset.visibility === "public" ? "Make Private" : "Make Public"}
+              </button>
+            )}
+            {!asset.isOwner && asset.visibility === "public" && (
+              <button type="button" className="px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50" style={{ background: "var(--blueprint)", color: "#ffffff" }} disabled={cloneMutation.isPending} onClick={() => cloneMutation.mutate()}>
+                Clone
+              </button>
+            )}
+            {asset.isOwner && (
+              <button
+                type="button"
+                className="px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: "var(--red)", color: "#ffffff" }}
+                disabled={deleteMutation.isPending}
+                onClick={() => setIsDeleteDialogOpen(true)}
+              >
+                Delete
+              </button>
+            )}
+          </>
         ) : undefined
       }
     >

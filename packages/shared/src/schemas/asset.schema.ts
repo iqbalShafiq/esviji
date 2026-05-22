@@ -12,6 +12,7 @@ export const BuildSvgAssetRequestSchema = z.object({
   }),
   referenceImageUrl: z.string().optional(),
   maxIterations: z.number().min(1).max(15).optional(),
+  visibility: z.enum(["private", "public"]).default("private"),
 });
 
 export const IterateSvgAssetRequestSchema = z.object({

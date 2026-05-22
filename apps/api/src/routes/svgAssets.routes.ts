@@ -39,6 +39,20 @@ export async function svgAssetsRoutes(
     );
   });
 
+  app.patch('/api/assets/:assetId/visibility', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.updateVisibility(
+      request as Parameters<SvgAssetsController['updateVisibility']>[0],
+      reply
+    );
+  });
+
+  app.post('/api/assets/:assetId/clone', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.clone(
+      request as Parameters<SvgAssetsController['clone']>[0],
+      reply
+    );
+  });
+
   app.delete('/api/assets/:assetId', async (request: FastifyRequest, reply: FastifyReply) => {
     await controller.delete(
       request as Parameters<SvgAssetsController['delete']>[0],

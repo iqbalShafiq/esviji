@@ -29,6 +29,9 @@ export interface AssetResponse {
   assetType: string;
   mode: string;
   style?: string;
+  visibility?: "private" | "public";
+  isOwner?: boolean;
+  owner?: { username: string; email: string } | null;
   output: {
     width: number;
     height: number;
@@ -88,6 +91,9 @@ export interface PackSummary {
   assetType: string;
   quantity: number;
   status: string;
+  visibility?: "private" | "public";
+  isOwner?: boolean;
+  owner?: { username: string; email: string } | null;
   assetCount?: number;
   thumbnails?: PackThumbnail[];
   createdAt: string;
@@ -123,6 +129,9 @@ export interface PackResponse {
   assetType: string;
   quantity: number;
   status: string;
+  visibility?: "private" | "public";
+  isOwner?: boolean;
+  owner?: { username: string; email: string } | null;
   style?: string | null;
   assets: AssetResponse[];
   output?: {

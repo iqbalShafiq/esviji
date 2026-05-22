@@ -77,6 +77,8 @@ export class SvgBuildOrchestrator {
       packConsistencyContext?: string;
       packId?: string;
       name?: string;
+      ownerId?: string;
+      visibility?: string;
       onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
       onIterationRendered?: (iteration: number, previewUrl: string) => void;
       onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
@@ -90,7 +92,9 @@ export class SvgBuildOrchestrator {
     const asset = await prisma.asset.create({
       data: {
         packId: options?.packId,
+        ownerId: options?.ownerId,
         name: options?.name,
+        visibility: options?.visibility ?? 'private',
         prompt: request.prompt,
         assetType: request.assetType ?? 'icon',
         mode: request.mode,
@@ -466,6 +470,7 @@ export class SvgBuildOrchestrator {
         },
       });
 
+      options?.onStage?.('export', 'Final outputs saved', 100);
       logger.info({ assetId: asset.id }, 'Pipeline completed successfully');
       return updatedAsset;
     } catch (error) {
@@ -480,7 +485,7 @@ export class SvgBuildOrchestrator {
     }
   }
 
-  async iterate(request: IterateSvgAssetRequest): Promise<Asset> {
+  async iterate(request: IterateSvgAssetRequest, options?: { ownerId?: string; isAdmin?: boolean }): Promise<Asset> {
     const asset = await prisma.asset.findUnique({
       where: { id: request.assetId },
       include: { iterations: { orderBy: { iterationNumber: 'desc' }, take: 1 } },
@@ -488,6 +493,10 @@ export class SvgBuildOrchestrator {
 
     if (!asset) {
       throw new Error(`Asset not found: ${request.assetId}`);
+    }
+
+    if (asset.ownerId && options?.ownerId && asset.ownerId !== options.ownerId && !options?.isAdmin) {
+      throw new Error('You can only refine assets you own');
     }
 
     if (asset.status === 'processing') {
@@ -630,6 +639,8 @@ export class SvgBuildOrchestrator {
       packConsistencyContext?: string;
       packId?: string;
       name?: string;
+      ownerId?: string;
+      visibility?: string;
       onStage?: (stage: PipelineStage, message: string, progress: number) => void;
       onIterationRendered?: (iteration: number, previewUrl: string) => void;
       onLlmToken?: (stage: PipelineStage, token: string) => void;
@@ -1042,6 +1053,7 @@ export class SvgBuildOrchestrator {
           },
         });
 
+        options?.onStage?.('export', 'Final outputs saved', 100);
         logger.info({ assetId: asset.id }, 'Pipeline completed successfully');
         return { finalAsset: updatedAsset };
       })

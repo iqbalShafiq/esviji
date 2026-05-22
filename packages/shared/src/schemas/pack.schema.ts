@@ -12,6 +12,7 @@ export const BuildSvgPackRequestSchema = z.object({
   }),
   items: z.array(z.string()).optional(),
   maxIterations: z.number().min(1).max(8).default(3),
+  visibility: z.enum(["private", "public"]).default("private"),
 });
 
 export const BuildSvgPackAssetRequestSchema = z.object({
@@ -27,6 +28,7 @@ export const BuildSvgPackAssetRequestSchema = z.object({
   }),
   referenceImageUrl: z.string().optional(),
   maxIterations: z.number().min(1).max(15).optional(),
+  visibility: z.enum(["private", "public"]).default("private"),
 });
 
 export type BuildSvgPackRequest = z.infer<typeof BuildSvgPackRequestSchema>;

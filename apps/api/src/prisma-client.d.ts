@@ -1,5 +1,6 @@
 declare module '@prisma/client' {
   export class PrismaClient {
+    user: UserDelegate;
     asset: AssetDelegate;
     assetPack: AssetPackDelegate;
     assetIteration: AssetIterationDelegate;
@@ -13,14 +14,28 @@ declare module '@prisma/client' {
     export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
   }
 
+  export interface User {
+    id: string;
+    username: string;
+    email: string;
+    passwordHash: string;
+    role: string;
+    tokenBalance: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }
+
   export interface Asset {
     id: string;
+    ownerId: string | null;
     packId: string | null;
+    sourceAssetId: string | null;
     name: string | null;
     prompt: string;
     assetType: string;
     mode: string;
     style: string | null;
+    visibility: string;
     status: string;
     width: number;
     height: number;
@@ -33,22 +48,27 @@ declare module '@prisma/client' {
     finalScores: unknown | null;
     createdAt: Date;
     updatedAt: Date;
+    owner?: User | null;
     pack?: AssetPack | null;
     iterations?: AssetIteration[];
   }
 
   export interface AssetPack {
     id: string;
+    ownerId: string | null;
+    sourcePackId: string | null;
     prompt: string;
     assetType: string;
     quantity: number;
     style: string | null;
+    visibility: string;
     status: string;
     styleSystem: unknown;
     consistencyScores: unknown | null;
     zipPath: string | null;
     createdAt: Date;
     updatedAt: Date;
+    owner?: User | null;
     assets?: Asset[];
   }
 
@@ -70,64 +90,37 @@ declare module '@prisma/client' {
     asset?: Asset;
   }
 
+  interface UserDelegate {
+    create(args: any): Promise<any>;
+    upsert(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+    findFirst(args: any): Promise<any>;
+    findMany(args?: any): Promise<any[]>;
+    update(args: any): Promise<any>;
+  }
+
   interface AssetDelegate {
-    create(args: { data: Partial<Asset> }): Promise<Asset>;
-    findUnique(args: {
-      where: { id: string };
-      include?: {
-        pack?: boolean;
-        iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number };
-      };
-      select?: Partial<Record<keyof Asset, boolean>>;
-    }): Promise<(Asset & { pack?: AssetPack | null; iterations: AssetIteration[] }) | null>;
-    findMany(args?: {
-      where?: { packId?: string };
-      orderBy?: { createdAt?: 'asc' | 'desc' } | Array<{ createdAt?: 'asc' | 'desc' }>;
-      include?: {
-        pack?: boolean;
-        iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number };
-      };
-    }): Promise<(Asset & { pack?: AssetPack | null; iterations?: AssetIteration[] })[]>;
-    update(args: { where: { id: string }; data: Partial<Asset> }): Promise<Asset>;
-    delete(args: { where: { id: string } }): Promise<Asset>;
-    count(args?: { where?: { packId?: string | null } }): Promise<number>;
+    create(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+    findMany(args?: any): Promise<any[]>;
+    update(args: any): Promise<any>;
+    updateMany(args: any): Promise<{ count: number }>;
+    delete(args: any): Promise<any>;
+    count(args?: any): Promise<number>;
+    aggregate(args?: any): Promise<any>;
   }
 
   interface AssetPackDelegate {
-    create(args: { data: Partial<AssetPack> }): Promise<AssetPack>;
-    findUnique(args: {
-      where: { id: string };
-      include?: {
-        assets?:
-          | boolean
-          | {
-              orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
-              take?: number;
-              select?: Partial<Record<keyof Asset, boolean>>;
-              include?: { iterations?: { orderBy?: { iterationNumber?: 'asc' | 'desc' }; take?: number } };
-            };
-      };
-    }): Promise<(AssetPack & { assets: (Asset & { iterations?: AssetIteration[] })[] }) | null>;
-    findMany(args?: {
-      orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
-      include?: {
-        _count?: { select?: { assets?: boolean } };
-        assets?: boolean | {
-          orderBy?: { createdAt?: 'asc' | 'desc'; updatedAt?: 'asc' | 'desc' };
-          take?: number;
-          select?: Partial<Record<keyof Asset, boolean>>;
-        };
-      };
-    }): Promise<(AssetPack & { assets: Asset[]; _count?: { assets: number } })[]>;
-    update(args: { where: { id: string }; data: Partial<Omit<AssetPack, 'quantity'>> & { quantity?: number | { increment: number } } }): Promise<AssetPack>;
+    create(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+    findMany(args?: any): Promise<any[]>;
+    update(args: any): Promise<any>;
+    updateMany(args: any): Promise<{ count: number }>;
   }
 
   interface AssetIterationDelegate {
-    create(args: { data: Partial<AssetIteration> }): Promise<AssetIteration>;
-    findMany(args?: {
-      where?: { assetId?: string };
-      orderBy?: { iterationNumber?: 'desc' | 'asc' };
-    }): Promise<AssetIteration[]>;
-    deleteMany(args: { where: { assetId: string } }): Promise<{ count: number }>;
+    create(args: any): Promise<any>;
+    findMany(args?: any): Promise<any[]>;
+    deleteMany(args: any): Promise<{ count: number }>;
   }
 }

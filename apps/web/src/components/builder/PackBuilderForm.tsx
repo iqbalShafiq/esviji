@@ -24,6 +24,7 @@ export function PackBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: P
     },
     items: [],
     maxIterations: 3,
+    visibility: "private",
   });
 
   const [itemsText, setItemsText] = useState("");
@@ -209,6 +210,21 @@ export function PackBuilderForm({ onJobCreated, onSubmitStart, onBuildError }: P
             value={form.style || ""}
             onChange={(e) => updateField("style", e.target.value || undefined)}
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5 mt-4">
+          <label className="text-xs font-medium" style={{ color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
+            Visibility
+          </label>
+          <select
+            className="w-full px-3 py-2.5 text-sm border focus:outline-none focus:ring-2 transition-shadow"
+            style={{ background: "var(--bg)", borderColor: "var(--line)", color: "var(--ink)" }}
+            value={form.visibility ?? "private"}
+            onChange={(e) => updateField("visibility", e.target.value as BuildSvgPackRequest["visibility"])}
+          >
+            <option value="private">Private</option>
+            <option value="public">Public cloneable</option>
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-4">

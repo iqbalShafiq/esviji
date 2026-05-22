@@ -8,14 +8,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String      @id @default(cuid())
+  username     String      @unique
+  email        String      @unique
+  passwordHash String
+  role         String      @default("user") // user | admin
+  tokenBalance Int         @default(50)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  assets Asset[]
+  packs  AssetPack[]
+}
+
 model Asset {
   id                String    @id @default(cuid())
+  ownerId           String?
   packId            String?
+  sourceAssetId     String?
   name              String?
   prompt            String
   assetType         String
   mode              String // direct | reference | premium
   style             String?
+  visibility        String    @default("private") // private | public
   status            String    @default("pending") // pending | processing | completed | failed
   width             Int
   height            Int
@@ -29,16 +46,24 @@ model Asset {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  owner      User?            @relation(fields: [ownerId], references: [id])
   pack       AssetPack?       @relation(fields: [packId], references: [id])
   iterations AssetIteration[]
+
+  @@index([ownerId])
+  @@index([visibility])
+  @@index([sourceAssetId])
 }
 
 model AssetPack {
   id                  String   @id @default(cuid())
+  ownerId             String?
+  sourcePackId        String?
   prompt              String
   assetType           String
   quantity            Int
   style               String?
+  visibility          String   @default("private")
   status              String   @default("pending")
   styleSystem         Json
   consistencyScores   Json?
@@ -46,7 +71,12 @@ model AssetPack {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  owner  User?   @relation(fields: [ownerId], references: [id])
   assets Asset[]
+
+  @@index([ownerId])
+  @@index([visibility])
+  @@index([sourcePackId])
 }
 
 model AssetIteration {
