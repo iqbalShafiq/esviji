@@ -47,7 +47,7 @@ type ChatCallOptions = {
   signal?: AbortSignal;
 };
 
-const STREAM_START_TIMEOUT_MS = 15_000;
+const STREAM_START_TIMEOUT_MS = 120_000;
 
 export class OpenAiProvider extends LlmProvider {
   private defaultModel: string;

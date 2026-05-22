@@ -4,7 +4,7 @@ export interface GenerateTextOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "json_object";
-  reasoningEffort?: "low" | "medium" | "high";
+  reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   onToken?: (token: string) => void;
   onReasoning?: (token: string) => void;
   jsonSchema?: Record<string, unknown>;

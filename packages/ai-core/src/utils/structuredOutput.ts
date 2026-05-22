@@ -67,7 +67,7 @@ ${JSON.stringify(cleanSchema, null, 2)}`;
           schema: z.ZodType<U, z.ZodTypeDef, unknown>,
           options?: {
             responseFormat?: "json_object";
-            reasoningEffort?: "low" | "medium" | "high";
+            reasoningEffort?: "low" | "medium" | "high" | "xhigh";
             onToken?: (token: string) => void;
             onReasoning?: (token: string) => void;
           }
