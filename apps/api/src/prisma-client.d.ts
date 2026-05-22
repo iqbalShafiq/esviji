@@ -1,12 +1,18 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 declare module '@prisma/client' {
   export class PrismaClient {
     user: UserDelegate;
     asset: AssetDelegate;
     assetPack: AssetPackDelegate;
     assetIteration: AssetIterationDelegate;
+    tokenPackage: GenericDelegate;
+    paymentOrder: GenericDelegate;
+    paymentEvent: GenericDelegate;
+    tokenLedgerEntry: GenericDelegate;
     $connect(): Promise<void>;
     $disconnect(): Promise<void>;
     $transaction(queries: Promise<unknown>[]): Promise<unknown[]>;
+    $transaction<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T>;
   }
 
   export namespace Prisma {
@@ -94,9 +100,22 @@ declare module '@prisma/client' {
     create(args: any): Promise<any>;
     upsert(args: any): Promise<any>;
     findUnique(args: any): Promise<any>;
+    findUniqueOrThrow(args: any): Promise<any>;
     findFirst(args: any): Promise<any>;
     findMany(args?: any): Promise<any[]>;
     update(args: any): Promise<any>;
+  }
+
+  interface GenericDelegate {
+    create(args: any): Promise<any>;
+    createMany(args: any): Promise<any>;
+    findUnique(args: any): Promise<any>;
+    findUniqueOrThrow(args: any): Promise<any>;
+    findFirst(args: any): Promise<any>;
+    findMany(args?: any): Promise<any[]>;
+    update(args: any): Promise<any>;
+    delete(args: any): Promise<any>;
+    count(args?: any): Promise<number>;
   }
 
   interface AssetDelegate {

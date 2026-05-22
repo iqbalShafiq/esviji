@@ -7,6 +7,7 @@ import HistoryPage from './routes/HistoryPage.js'
 import LoginPage from './routes/LoginPage.js'
 import RegisterPage from './routes/RegisterPage.js'
 import AdminPage from './routes/AdminPage.js'
+import BillingPage from './routes/BillingPage.js'
 import { ProtectedRoute } from './auth/ProtectedRoute.js'
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
       <Route path="/packs/new" element={<ProtectedRoute><MyPacksPage /></ProtectedRoute>} />
       <Route path="/packs/:packId" element={<ProtectedRoute><PackDetailPage /></ProtectedRoute>} />
       <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+      <Route path="/billing" element={<ProtectedRoute><BillingPage /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
     </Routes>
   )

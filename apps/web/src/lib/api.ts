@@ -117,6 +117,73 @@ export async function updateAdminUserTokens(userId: string, tokenBalance: number
   return unwrapEnvelope(res.data);
 }
 
+export interface PaymentConfig {
+  provider: "midtrans";
+  environment: "sandbox" | "production";
+  isConfigured: boolean;
+  enabledPayments: string[];
+}
+
+export interface TokenPackage {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  tokenAmount: number;
+  priceIdr: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface PaymentOrder {
+  id: string;
+  providerOrderId: string;
+  providerPaymentType?: string | null;
+  status: string;
+  amountIdr: number;
+  tokenAmount: number;
+  snapRedirectUrl?: string | null;
+  failureReason?: string | null;
+  needsManualReview: boolean;
+  paidAt?: string | null;
+  refundedAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  package: Pick<TokenPackage, "id" | "code" | "name" | "description" | "tokenAmount" | "priceIdr">;
+  user?: { username: string; email: string };
+}
+
+export async function getPaymentConfig(): Promise<PaymentConfig> {
+  const res = await api.get<ApiEnvelope<PaymentConfig>>("/api/payments/config");
+  return unwrapEnvelope(res.data);
+}
+
+export async function listTokenPackages(): Promise<TokenPackage[]> {
+  const res = await api.get<ApiEnvelope<TokenPackage[]>>("/api/payments/packages");
+  return unwrapEnvelope(res.data);
+}
+
+export async function createPaymentOrder(packageId: string): Promise<{ order: PaymentOrder; snapToken?: string; redirectUrl?: string }> {
+  const res = await api.post<ApiEnvelope<{ order: PaymentOrder; snapToken?: string; redirectUrl?: string }>>("/api/payments/orders", { packageId });
+  return unwrapEnvelope(res.data);
+}
+
+export async function listPaymentOrders(): Promise<PaymentOrder[]> {
+  const res = await api.get<ApiEnvelope<PaymentOrder[]>>("/api/payments/orders");
+  return unwrapEnvelope(res.data);
+}
+
+export async function syncPaymentOrder(orderId: string): Promise<PaymentOrder> {
+  const res = await api.post<ApiEnvelope<PaymentOrder>>(`/api/payments/orders/${orderId}/sync`);
+  return unwrapEnvelope(res.data);
+}
+
+export async function listAdminPaymentOrders(): Promise<PaymentOrder[]> {
+  const res = await api.get<ApiEnvelope<PaymentOrder[]>>("/api/admin/payments/orders");
+  return unwrapEnvelope(res.data);
+}
+
 export async function updateAssetVisibility(assetId: string, visibility: "private" | "public"): Promise<void> {
   await api.patch(`/api/assets/${assetId}/visibility`, { visibility });
 }

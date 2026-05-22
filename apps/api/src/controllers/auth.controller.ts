@@ -42,7 +42,20 @@ export class AuthController {
     }
 
     const user = await prisma.user.create({
-      data: { username, email, passwordHash: await hashPassword(password), tokenBalance: 50 },
+      data: {
+        username,
+        email,
+        passwordHash: await hashPassword(password),
+        tokenBalance: 50,
+        tokenLedgerEntries: {
+          create: {
+            amount: 50,
+            type: 'signup_bonus',
+            note: 'Starter token balance for new accounts',
+            idempotencyKey: `signup:${email}`,
+          },
+        },
+      },
       select: { id: true, username: true, email: true, role: true, tokenBalance: true },
     });
     const token = signAuthToken({ sub: user.id, role: user.role, email: user.email, username: user.username });

@@ -20,6 +20,95 @@ model User {
 
   assets Asset[]
   packs  AssetPack[]
+  paymentOrders PaymentOrder[]
+  tokenLedgerEntries TokenLedgerEntry[]
+}
+
+model TokenPackage {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  tokenAmount Int
+  priceIdr    Int
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  paymentOrders PaymentOrder[]
+
+  @@index([isActive, sortOrder])
+}
+
+model PaymentOrder {
+  id                 String    @id @default(cuid())
+  userId             String
+  packageId          String
+  provider           String    @default("midtrans")
+  providerOrderId    String    @unique
+  providerTransactionId String?
+  providerPaymentType String?
+  status             String    @default("pending") // pending | paid | failed | expired | cancelled | refunded | partial_refund | chargeback | review
+  amountIdr          Int
+  tokenAmount        Int
+  snapToken          String?
+  snapRedirectUrl    String?
+  failureReason      String?
+  needsManualReview  Boolean   @default(false)
+  paidAt             DateTime?
+  tokenCreditedAt    DateTime?
+  tokenRevokedAt     DateTime?
+  refundedAt         DateTime?
+  expiresAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user    User         @relation(fields: [userId], references: [id])
+  package TokenPackage @relation(fields: [packageId], references: [id])
+  events  PaymentEvent[]
+  ledgerEntries TokenLedgerEntry[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model PaymentEvent {
+  id              String   @id @default(cuid())
+  paymentOrderId  String?
+  provider        String   @default("midtrans")
+  providerEventId String   @unique
+  orderId         String?
+  transactionId   String?
+  transactionStatus String?
+  fraudStatus     String?
+  statusCode      String?
+  grossAmount     String?
+  signatureValid  Boolean  @default(false)
+  rawPayload      Json
+  createdAt       DateTime @default(now())
+
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+
+  @@index([paymentOrderId, createdAt])
+  @@index([orderId])
+}
+
+model TokenLedgerEntry {
+  id             String   @id @default(cuid())
+  userId         String
+  paymentOrderId String?
+  amount         Int
+  type           String // signup_bonus | payment_credit | generation_reserve | generation_refund | payment_reversal | admin_adjustment
+  note           String?
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([paymentOrderId])
 }
 
 model Asset {

@@ -15,6 +15,7 @@ export function TopBar({ actions }: TopBarProps) {
     { to: "/assets/new", label: "Asset Builder" },
     { to: "/packs", label: "My Packs" },
     { to: "/history", label: "History" },
+    { to: "/billing", label: "Billing" },
     ...(user?.role === "admin" ? [{ to: "/admin", label: "Admin" }] : []),
   ];
 
@@ -31,7 +32,11 @@ export function TopBar({ actions }: TopBarProps) {
         </nav>
       </div>
       <div className="flex items-center gap-3">
-        {user && <span className="hidden text-[10px] font-mono sm:inline" style={{ color: "var(--muted)" }}>{user.role === "admin" ? "ADMIN / unlimited" : `${user.tokenBalance ?? 0} tokens`}</span>}
+        {user && (
+          <Link to="/billing" className="hidden border px-2.5 py-1 text-[10px] font-mono transition-colors sm:inline" style={{ color: "var(--muted)", borderColor: "var(--line)", background: "var(--bg)" }}>
+            {user.role === "admin" ? "ADMIN / unlimited" : `${user.tokenBalance ?? 0} tokens`}
+          </Link>
+        )}
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
     </header>

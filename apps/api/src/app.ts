@@ -39,14 +39,17 @@ import { SvgAssetsController } from './controllers/svgAssets.controller.js';
 import { SvgPacksController } from './controllers/svgPacks.controller.js';
 import { AuthController } from './controllers/auth.controller.js';
 import { AdminController } from './controllers/admin.controller.js';
+import { PaymentsController } from './controllers/payments.controller.js';
 import { svgAssetsRoutes } from './routes/svgAssets.routes.js';
 import { registerSvgPackRoutes } from './routes/svgPacks.routes.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
+import { registerPaymentRoutes } from './routes/payments.routes.js';
 import { SvgRepairAgentService } from './agents/SvgRepairAgentService.js';
 import { SvgGenerationWorkflowService } from './agents/SvgGenerationWorkflowService.js';
 import { prisma } from './db/prisma.js';
 import { ensureDefaultAdminUser } from './services/UserBootstrapService.js';
+import { MidtransPaymentService } from './services/MidtransPaymentService.js';
 
 function configureLangSmithEnv(): void {
   if (!process.env.LANGSMITH_TRACING && process.env.LANGSMITH_ENABLED) {
@@ -227,6 +230,7 @@ export async function buildApp() {
   const svgPacksController = new SvgPacksController(packOrchestrator, jobService);
   const authController = new AuthController();
   const adminController = new AdminController();
+  const paymentsController = new PaymentsController(new MidtransPaymentService());
 
   // Register routes
   await app.register(async (instance) => {
@@ -235,6 +239,10 @@ export async function buildApp() {
 
   await app.register(async (instance) => {
     await registerAdminRoutes(instance, adminController);
+  }, { prefix: '' });
+
+  await app.register(async (instance) => {
+    await registerPaymentRoutes(instance, paymentsController);
   }, { prefix: '' });
 
   await app.register(async (instance) => {
