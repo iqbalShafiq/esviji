@@ -429,6 +429,7 @@ export class SvgBuildOrchestrator {
           {
             onToken: (token) => options?.onLlmToken?.('revise', token),
             onReasoning: (token) => options?.onReasoning?.('revise', token),
+            issueHistorySummary: issueTracker.getHistorySummary(),
             onRetry: (attempt, maxRetries, error) => reportRetry('revise', attempt, maxRetries, error),
           }
         );
@@ -1009,6 +1010,7 @@ export class SvgBuildOrchestrator {
           {
             onToken: (token) => options?.onLlmToken?.('revise', token),
             onReasoning: (token) => options?.onReasoning?.('revise', token),
+            issueHistorySummary: issueTracker.getHistorySummary(),
             onRetry: (attempt, retries, error) => reportRetry('revise', attempt, retries, error),
           }
         );
@@ -1185,6 +1187,15 @@ export class SvgBuildOrchestrator {
         });
       }
 
+      if (input.lastRevisionPlan.strategy === 'full_regenerate') {
+        return this.svgCoder.code(input.brief, input.styleSystem, input.layout, {
+          revisionInstruction: buildRevisionInstruction(input.lastRevisionPlan),
+          previousErrorContext: buildPreviousSvgFailureContext(input.currentSvg),
+          onToken: input.onToken,
+          onReasoning: input.onReasoning,
+        });
+      }
+
       return this.svgCoder.code(input.brief, input.styleSystem, input.layout, {
         previousSvg: input.currentSvg,
         revisionInstruction: buildRevisionInstruction(input.lastRevisionPlan),
@@ -1203,17 +1214,47 @@ export class SvgBuildOrchestrator {
 }
 
 function buildRevisionInstruction(plan: RevisionPlan): string {
+  const contract = {
+    strategy: plan.strategy,
+    executionMode: plan.strategy === 'full_regenerate'
+      ? 'blank_slate_rebuild_do_not_copy_previous_svg'
+      : 'targeted_revision',
+    updatedLayout: plan.updatedLayout,
+    layerTransforms: plan.layerTransforms,
+    layersToRegenerate: plan.layersToRegenerate,
+    mustChange: plan.mustChange,
+    avoidRepeating: plan.avoidRepeating,
+    successCriteria: plan.successCriteria,
+    notes: plan.notes,
+    generatorRules: plan.strategy === 'full_regenerate'
+      ? [
+          'Do not reuse the previous SVG as a template.',
+          'Create a materially different layer hierarchy and geometry that directly addresses the evaluator issues.',
+          'Preserve only the brief, style system, canvas, and layout intent, not the failed implementation.',
+          'Before returning, verify that the SVG satisfies every successCriteria item and avoids every avoidRepeating item.',
+        ]
+      : [
+          'Make the smallest safe change that resolves the target issues.',
+          'Keep resolved layers stable, but do not preserve unresolved failure patterns.',
+        ],
+  };
+
   return JSON.stringify(
-    {
-      strategy: plan.strategy,
-      updatedLayout: plan.updatedLayout,
-      layerTransforms: plan.layerTransforms,
-      layersToRegenerate: plan.layersToRegenerate,
-      notes: plan.notes,
-    },
+    contract,
     null,
     2
   );
+}
+
+function buildPreviousSvgFailureContext(svg: string): string {
+  const maxChars = 3500;
+  const truncatedSvg = svg.length > maxChars ? `${svg.slice(0, maxChars)}\n<!-- truncated failure reference -->` : svg;
+  return [
+    'The previous SVG is provided only as a failure reference for what NOT to repeat.',
+    'Do not copy its layer structure, geometry, defs, ids, or decorative details unless the revision contract explicitly says to keep them.',
+    'Previous failed SVG excerpt:',
+    truncatedSvg,
+  ].join('\n');
 }
 
 function serializeLayerTransform(transform: NonNullable<RevisionPlan['layerTransforms']>[number]['transform']): string {

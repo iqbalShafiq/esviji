@@ -17,6 +17,9 @@ export const RevisionPlanSchema = z.object({
     )
     .optional(),
   layersToRegenerate: z.array(z.string()).optional(),
+  mustChange: z.array(z.string()).optional(),
+  avoidRepeating: z.array(z.string()).optional(),
+  successCriteria: z.array(z.string()).optional(),
   notes: z.string(),
 });
 

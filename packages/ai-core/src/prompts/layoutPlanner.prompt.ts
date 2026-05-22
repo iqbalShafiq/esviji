@@ -23,6 +23,13 @@ Return a JSON object matching LayoutBlueprint with these fields:
 - composition: object (freeform layout metadata)
 - layers: array of objects with id, type, bounds (x, y, w, h), anchor
 
+Coordinate rules:
+- If normalizedCoordinateSystem is false, bounds MUST be pixel coordinates inside the ${params.width}x${params.height} canvas.
+- If normalizedCoordinateSystem is true, bounds MUST be percentages from 0 to 100.
+- Do not mix coordinate systems.
+- For pixel coordinates, every layer should fit inside the canvas and use realistic sizes, not normalized percentages.
+- Make composition metadata useful: include intended silhouette, visual hierarchy, simplification priorities, and which layers are essential vs decorative.
+
 Return JSON only, no markdown.`;
 
   return { system, user };

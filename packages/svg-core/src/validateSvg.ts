@@ -44,6 +44,17 @@ const BLOCKED_ATTRIBUTES_REGEX = /^on/i;
 const EXTERNAL_URL_REGEX = /^(https?:|data:|javascript:|file:|ftp:)/i;
 const HREF_ATTRIBUTES = new Set(["href", "xlink:href", "src"]);
 
+const CANONICAL_ELEMENT_NAMES: Record<string, string> = {
+  lineargradient: "linearGradient",
+  radialgradient: "radialGradient",
+  clippath: "clipPath",
+  feturbulence: "feTurbulence",
+  fecolormatrix: "feColorMatrix",
+  feblend: "feBlend",
+  fegaussianblur: "feGaussianBlur",
+  feoffset: "feOffset",
+};
+
 function sanitizeAttributes(
   tag: string,
   tagName: string,
@@ -53,7 +64,8 @@ function sanitizeAttributes(
   // Match all attributes: name="value" or name='value' or name=value or boolean attributes
   const attrRegex =
     /\s+([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))|(\s+[a-zA-Z_:][a-zA-Z0-9_:.-]*)(?=\s|>|\/>)/g;
-  let sanitizedTag = `<${tagName}`;
+  const outputTagName = canonicalElementName(tagName);
+  let sanitizedTag = `<${outputTagName}`;
   let match;
 
   while ((match = attrRegex.exec(tag)) !== null) {
@@ -212,7 +224,7 @@ export function validateSvg(svg: string): SvgValidationResult {
       if (tagStack.length > 0 && tagStack[tagStack.length - 1] === tagName) {
         tagStack.pop();
       }
-      sanitizedParts.push(`</${tagName}>`);
+      sanitizedParts.push(`</${canonicalElementName(tagName)}>`);
     }
 
     lastIndex = matchIndex + fullMatch.length;
@@ -235,4 +247,8 @@ export function validateSvg(svg: string): SvgValidationResult {
     errors,
     warnings,
   };
+}
+
+function canonicalElementName(lowerTagName: string): string {
+  return CANONICAL_ELEMENT_NAMES[lowerTagName] ?? lowerTagName;
 }

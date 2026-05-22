@@ -15,7 +15,7 @@ Style system: ${JSON.stringify(params.styleSystem, null, 2)}
 Layout plan: ${JSON.stringify(params.layout, null, 2)}
 ${params.revisionInstruction ? `Revision instruction / structured revision plan:\n${params.revisionInstruction}` : ""}
 ${params.previousErrorContext ? `Previous failed attempt context:\n${params.previousErrorContext}` : ""}
-${params.previousSvg ? `Previous SVG to revise:\n${params.previousSvg}` : ""}
+${params.previousSvg ? `Previous SVG context:\n${params.previousSvg}` : ""}
 
 Requirements:
 - Output valid SVG markup only, no markdown fences, no explanations
@@ -30,6 +30,10 @@ Requirements:
 - Keep it clean and editable
 - Use only safe SVG elements and attributes; do not use script, style, foreignObject, image, external URLs, data URLs, or event handlers
 - When a structured revision plan is provided, follow its strategy, layersToRegenerate, layerTransforms failure context, and updated layout intent explicitly. Preserve resolved parts of the previous SVG when possible.
+- If the revision plan says full_regenerate, do not preserve the previous SVG structure. Treat any previous SVG as a failure reference, rebuild from the brief/layout, and satisfy every mustChange, avoidRepeating, and successCriteria item.
+- If the revision plan contains avoidRepeating, verify your SVG does not repeat those exact failure patterns before returning.
+- If the revision plan contains successCriteria, use it as a preflight checklist and only return an SVG that satisfies it.
+- Do not merely rename attributes or make cosmetic edits when the issues describe poor visual quality, unreadability, weak metaphor, or repeated failures. Make structural geometry/layer changes.
 
 Output SVG markup only.`;
 

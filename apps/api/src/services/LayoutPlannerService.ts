@@ -31,9 +31,12 @@ export class LayoutPlannerService {
       { maxRetries: 3, onToken: options?.onToken, onReasoning: options?.onReasoning, onRetry: options?.onRetry }
     );
 
-    // Convert normalized bounds to pixel bounds for each layer
+    // Keep the coordinate contract honest: only normalize when the layout says it is normalized.
+    // Previously pixel-based layouts were multiplied by canvas size, polluting later revision prompts.
     const layersWithPixelBounds = layout.layers.map((layer) => {
-      const pixelBounds = normalizedToPixel(layer.bounds, width, height);
+      const pixelBounds = layout.normalizedCoordinateSystem
+        ? normalizedToPixel(layer.bounds, width, height)
+        : layer.bounds;
       return {
         ...layer,
         pixelBounds,

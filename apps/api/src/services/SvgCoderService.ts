@@ -67,6 +67,7 @@ export class SvgCoderService {
         if (!this.looksLikeSvg(cleaned)) {
           throw new Error('Output did not start with an <svg> root element.');
         }
+        this.assertRevisionContract(cleaned, options?.revisionInstruction);
         break;
       } catch (error) {
         const normalized = error instanceof Error ? error : new Error(String(error));
@@ -106,6 +107,7 @@ export class SvgCoderService {
           if (!this.looksLikeSvg(cleaned)) {
             throw new Error('Output did not start with an <svg> root element.');
           }
+          this.assertRevisionContract(cleaned, options?.revisionInstruction);
 
           if (!this.isLowComplexitySvg(cleaned)) {
             break;
@@ -139,5 +141,42 @@ export class SvgCoderService {
       (svg.match(/<(rect|circle|ellipse|polygon|polyline|line)\b/gi) || []).length + pathCount;
     const blackFillCount = (svg.match(/fill=["']#0{3,6}["']/gi) || []).length;
     return groupCount < 2 || shapeCount < 3 || (shapeCount <= 4 && blackFillCount >= 1);
+  }
+
+  private assertRevisionContract(svg: string, revisionInstruction?: string): void {
+    if (!revisionInstruction) return;
+
+    if (/full_regenerate/i.test(revisionInstruction)) {
+      const shapeCount = (svg.match(/<(path|rect|circle|ellipse|polygon|polyline|line)\b/gi) || []).length;
+      const groupCount = (svg.match(/<g\b/gi) || []).length;
+      if (shapeCount < 6 || groupCount < 3) {
+        throw new Error(
+          'Full regeneration did not produce enough meaningful geometry to satisfy the revision contract.'
+        );
+      }
+    }
+
+    const avoidRepeating = this.extractStringArrayFromRevision(revisionInstruction, 'avoidRepeating');
+    if (avoidRepeating.length === 0) return;
+
+    const normalizedSvg = svg.toLowerCase();
+    const repeated = avoidRepeating.filter((item) => {
+      const normalizedItem = item.toLowerCase().trim();
+      return normalizedItem.length >= 16 && normalizedSvg.includes(normalizedItem);
+    });
+
+    if (repeated.length > 0) {
+      throw new Error(`Revision repeated forbidden failure pattern(s): ${repeated.slice(0, 2).join('; ')}`);
+    }
+  }
+
+  private extractStringArrayFromRevision(revisionInstruction: string, key: string): string[] {
+    try {
+      const parsed = JSON.parse(revisionInstruction) as Record<string, unknown>;
+      const value = parsed[key];
+      return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    } catch {
+      return [];
+    }
   }
 }
