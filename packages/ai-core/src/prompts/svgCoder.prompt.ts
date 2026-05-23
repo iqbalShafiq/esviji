@@ -29,6 +29,7 @@ Requirements:
 - Use viewBox and appropriate xmlns
 - Keep it clean and editable
 - Use only safe SVG elements and attributes; do not use script, style, foreignObject, image, external URLs, data URLs, or event handlers
+- If using filters, only use this supported safe subset: filter, feDropShadow, feGaussianBlur, feOffset, feFlood, feComposite, feMerge, feMergeNode, feComponentTransfer, feFuncA, feFuncR, feFuncG, feFuncB, feTurbulence, feColorMatrix, feBlend
 - When a structured revision plan is provided, follow its strategy, layersToRegenerate, layerTransforms failure context, and updated layout intent explicitly. Preserve resolved parts of the previous SVG when possible.
 - If the revision plan says full_regenerate, do not preserve the previous SVG structure. Treat any previous SVG as a failure reference, rebuild from the brief/layout, and satisfy every mustChange, avoidRepeating, and successCriteria item.
 - If the revision plan contains avoidRepeating, verify your SVG does not repeat those exact failure patterns before returning.

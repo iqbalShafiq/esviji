@@ -154,6 +154,7 @@ Rules:
 - Preserve or improve the creative brief, style system, and layout intent.
 - Use named <g id="..."> groups for meaningful layers.
 - Keep all important artwork inside the viewBox with comfortable padding.
+- If validation reports unknown filter elements, replace them only with this supported safe subset: filter, feDropShadow, feGaussianBlur, feOffset, feFlood, feComposite, feMerge, feMergeNode, feComponentTransfer, feFuncA, feFuncR, feFuncG, feFuncB, feTurbulence, feColorMatrix, feBlend.
 - Do not return markdown fences or explanations inside the SVG string.
 - Use the tools before finalizing whenever there are technical errors.`;
   }
