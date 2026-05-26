@@ -5,13 +5,14 @@ interface PipelineRailProps {
   asset?: AssetResponse;
   currentStage?: string;
   failed?: boolean;
+  activeRun?: boolean;
 }
 
-export function PipelineRail({ asset, currentStage, failed }: PipelineRailProps) {
+export function PipelineRail({ asset, currentStage, failed, activeRun = false }: PipelineRailProps) {
   const stages = PIPELINE_STAGES.map((stage) => ({
     key: stage,
     label: stage.charAt(0).toUpperCase() + stage.slice(1),
-    status: getStageStatus(asset, stage, currentStage, failed),
+    status: getStageStatus(asset, stage, currentStage, failed, activeRun),
   }));
 
   return (
@@ -111,10 +112,28 @@ function getStageStatus(
   asset: AssetResponse | undefined,
   stage: string,
   currentStage?: string,
-  failed?: boolean
+  failed?: boolean,
+  activeRun?: boolean
 ): "pending" | "running" | "completed" | "failed" {
   const effectiveStage = currentStage ?? asset?.currentStage;
   if (!asset && !effectiveStage) return "pending";
+
+  if (activeRun) {
+    const currentIdx = effectiveStage
+      ? PIPELINE_STAGES.indexOf(effectiveStage as (typeof PIPELINE_STAGES)[number])
+      : -1;
+    const stageIdx = PIPELINE_STAGES.indexOf(stage as (typeof PIPELINE_STAGES)[number]);
+    if (failed) {
+      if (stageIdx < currentIdx) return "completed";
+      if (stageIdx === currentIdx) return "failed";
+      return "pending";
+    }
+    if (currentIdx < 0) return "pending";
+    if (stageIdx < currentIdx) return "completed";
+    if (stageIdx === currentIdx) return "running";
+    return "pending";
+  }
+
   if (failed || asset?.status === "failed") {
     const currentIdx = PIPELINE_STAGES.indexOf(
       effectiveStage as (typeof PIPELINE_STAGES)[number]

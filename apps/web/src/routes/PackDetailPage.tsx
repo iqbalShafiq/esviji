@@ -20,7 +20,8 @@ import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
 import { DuplicateDialog } from "../components/common/DuplicateDialog.js";
-import { clonePack, deleteAsset, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility, cloneAsset, assignAssetToPack } from "../lib/api.js";
+import { AssetNameEditor } from "../components/common/AssetNameEditor.js";
+import { clonePack, deleteAsset, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility, cloneAsset, assignAssetToPack, updateAssetName } from "../lib/api.js";
 import type { AssetResponse, BackgroundMode, JobResponse, PreviewMode, PreviewSize } from "../types/index.js";
 import { useAuth } from "../auth/AuthContext.js";
 
@@ -85,6 +86,16 @@ export default function PackDetailPage() {
       await refetch();
       await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
       await queryClient.invalidateQueries({ queryKey: ["assets", "list"] });
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ assetId, name }: { assetId: string; name: string }) => updateAssetName(assetId, name),
+    onSuccess: async (updatedAsset) => {
+      setSelectedAsset((current) => (current?.id === updatedAsset.id ? updatedAsset : current));
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["assets", "list"] });
+      await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
     },
   });
 
@@ -218,7 +229,14 @@ export default function PackDetailPage() {
               )}
               <div className="min-h-0 flex-1">
                 <PreviewWorkspace
-                  pipelineRail={<PipelineRail asset={activeAsset} currentStage={job?.currentStage} failed={job?.status === "failed"} />}
+                  pipelineRail={
+                    <PipelineRail
+                      asset={activeAsset}
+                      currentStage={job?.currentStage}
+                      failed={job?.status === "failed"}
+                      activeRun={isGenerating}
+                    />
+                  }
                   canvas={
                   <PreviewCanvas
                       asset={activeAsset}
@@ -299,6 +317,14 @@ export default function PackDetailPage() {
             {!isGenerating && <PackConsistencyPanel pack={pack} />}
             {activeAsset && showingPreview && !isGenerating && (
               <>
+                {activeAsset.isOwner && (
+                  <AssetNameEditor
+                    value={activeAsset.name || activeAsset.prompt}
+                    isPending={renameMutation.isPending}
+                    disabled={isLoading}
+                    onSave={(name) => renameMutation.mutate({ assetId: activeAsset.id, name })}
+                  />
+                )}
                 <ExportButtons assetId={activeAsset.id} svg={activeAsset.finalSvg} pngUrl={activeAsset.finalPngUrl} />
                 {activeAsset.finalSvg && <SvgCodeEditor svg={activeAsset.finalSvg} />}
                 <ScoresCard scores={activeAsset.evaluation?.scores} />

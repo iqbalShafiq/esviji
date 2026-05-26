@@ -46,6 +46,13 @@ export async function svgAssetsRoutes(
     );
   });
 
+  app.patch('/api/assets/:assetId/name', async (request: FastifyRequest, reply: FastifyReply) => {
+    await controller.updateName(
+      request as Parameters<SvgAssetsController['updateName']>[0],
+      reply
+    );
+  });
+
   app.post('/api/assets/:assetId/clone', async (request: FastifyRequest, reply: FastifyReply) => {
     await controller.clone(
       request as Parameters<SvgAssetsController['clone']>[0],

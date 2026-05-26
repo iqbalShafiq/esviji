@@ -269,6 +269,42 @@ export class SvgAssetsController {
     reply.status(200).send({ success: true, data: updated });
   }
 
+  async updateName(request: FastifyRequest<{ Params: { assetId: string }; Body: unknown }>, reply: FastifyReply): Promise<void> {
+    const user = await requireAuthUser(request, reply);
+    if (!user) return;
+    const parsed = UpdateAssetNameSchema.safeParse(request.body);
+    if (!parsed.success) return sendValidationError(reply, parsed.error.format());
+
+    const { assetId } = request.params;
+    const { name } = parsed.data;
+    const asset = await prisma.asset.findUnique({
+      where: { id: assetId },
+      select: { id: true, ownerId: true, pack: { select: { ownerId: true } } },
+    });
+    if (!asset) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: 'Asset not found' });
+    if (!canWriteAsset(asset, user.id, user.role)) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'You can only update assets you own' });
+
+    const duplicate = await prisma.asset.findMany({
+      where: { ownerId: user.id, name, id: { not: assetId } },
+      take: 1,
+      select: { id: true },
+    });
+    if (duplicate.length > 0) {
+      return reply.status(409).send({
+        statusCode: 409,
+        error: 'Conflict',
+        message: 'Asset name already exists. Please choose a different name.',
+      });
+    }
+
+    const updated = await prisma.asset.update({
+      where: { id: assetId },
+      data: { name },
+      include: { owner: true, pack: true, iterations: { orderBy: { iterationNumber: 'asc' } } },
+    });
+    reply.status(200).send({ success: true, data: this.serializeAssetDetail(updated, user.id) });
+  }
+
   async clone(request: FastifyRequest<{ Params: { assetId: string }; Body: unknown }>, reply: FastifyReply): Promise<void> {
     const user = await requireAuthUser(request, reply);
     if (!user) return;
@@ -282,11 +318,12 @@ export class SvgAssetsController {
     const cloneName = parseResult.data.name;
 
     if (cloneName) {
-      const existingName = await prisma.asset.findFirst({
+      const existingName = await prisma.asset.findMany({
         where: { ownerId: user.id, name: cloneName },
+        take: 1,
         select: { id: true },
       });
-      if (existingName) {
+      if (existingName.length > 0) {
         return reply.status(409).send({
           statusCode: 409,
           error: 'Conflict',
@@ -410,6 +447,7 @@ export class SvgAssetsController {
 
 const UpdateAssetPackRequestSchema = z.object({ packId: z.string().min(1).nullable() });
 const VisibilitySchema = z.object({ visibility: z.enum(['private', 'public']) });
+const UpdateAssetNameSchema = z.object({ name: z.string().trim().min(1) });
 const CloneAssetRequestSchema = z.object({ name: z.string().trim().min(1).optional() });
 
 async function updatePackQuantity(packId: string): Promise<void> {

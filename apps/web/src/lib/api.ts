@@ -189,6 +189,13 @@ export async function updateAssetVisibility(assetId: string, visibility: "privat
   await api.patch(`/api/assets/${assetId}/visibility`, { visibility });
 }
 
+export async function updateAssetName(assetId: string, name: string): Promise<AssetResponse> {
+  const res = await api.patch<ApiEnvelope<RawAsset>>(`/api/assets/${assetId}/name`, { name });
+  const raw = unwrapEnvelope(res.data);
+  const finalSvg = await fetchSvgContent(raw.finalSvgPath);
+  return normalizeAsset(raw, finalSvg);
+}
+
 export async function updatePackVisibility(packId: string, visibility: "private" | "public"): Promise<void> {
   await api.patch(`/api/packs/${packId}/visibility`, { visibility });
 }

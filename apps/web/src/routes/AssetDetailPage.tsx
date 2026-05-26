@@ -18,7 +18,8 @@ import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPr
 import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
-import { cloneAsset, deleteAsset, getAsset, iterateSvgAsset, subscribeJobStream, updateAssetVisibility } from "../lib/api.js";
+import { AssetNameEditor } from "../components/common/AssetNameEditor.js";
+import { cloneAsset, deleteAsset, getAsset, iterateSvgAsset, subscribeJobStream, updateAssetName, updateAssetVisibility } from "../lib/api.js";
 import type { AssetResponse, JobResponse } from "../types/index.js";
 import type {
   PreviewMode,
@@ -62,6 +63,18 @@ export default function AssetDetailPage() {
   const visibilityMutation = useMutation({
     mutationFn: (visibility: "private" | "public") => updateAssetVisibility(assetId!, visibility),
     onSuccess: async () => refetch(),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) => updateAssetName(assetId!, name),
+    onSuccess: async (updatedAsset) => {
+      queryClient.setQueryData(["asset", assetId], updatedAsset);
+      await queryClient.invalidateQueries({ queryKey: ["assets", "list"] });
+      await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+      if (updatedAsset.packId) {
+        await queryClient.invalidateQueries({ queryKey: ["pack", updatedAsset.packId] });
+      }
+    },
   });
 
   const cloneMutation = useMutation({
@@ -129,6 +142,8 @@ export default function AssetDetailPage() {
   const handleAssetUpdated = (updatedAsset: AssetResponse) => {
     queryClient.setQueryData(["asset", assetId], updatedAsset);
   };
+
+  const isGenerating = isProcessing || job?.status === "queued" || job?.status === "running";
 
   return (
     <StudioFrame
@@ -200,7 +215,14 @@ export default function AssetDetailPage() {
         }
         centerPanel={
           <PreviewWorkspace
-            pipelineRail={<PipelineRail asset={asset} currentStage={job?.currentStage} failed={job?.status === 'failed'} />}
+            pipelineRail={
+              <PipelineRail
+                asset={asset}
+                currentStage={job?.currentStage}
+                failed={job?.status === 'failed'}
+                activeRun={isGenerating}
+              />
+            }
             canvas={
               <PreviewCanvas
                 asset={asset}
@@ -239,7 +261,26 @@ export default function AssetDetailPage() {
           <div className="flex flex-col gap-4 p-4 overflow-y-auto h-full">
             {asset && (
               <>
-                {hasPipelineData(job) && (
+                {asset.isOwner && (
+                  <AssetNameEditor
+                    value={asset.name || asset.prompt}
+                    isPending={renameMutation.isPending}
+                    disabled={isLoading || isProcessing}
+                    onSave={(name) => renameMutation.mutate(name)}
+                  />
+                )}
+                {job && isGenerating && (
+                  <PipelineFlowLogs
+                    logs={job.logs}
+                    currentStage={job.currentStage}
+                    failed={job.status === 'failed'}
+                    stageStreams={job.stageStreams}
+                    stageReasoningStreams={job.stageReasoningStreams}
+                    streamEvents={job.streamEvents}
+                    error={job.error}
+                  />
+                )}
+                {hasPipelineData(job) && !isGenerating && (
                   <PipelineFlowLogs
                     logs={job.logs}
                     currentStage={job.currentStage}
