@@ -15,10 +15,11 @@ import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { ExportButtons } from "../components/builder/ExportButtons.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
+import { PipelineFlowLogs } from "../components/builder/PipelineFlowLogs.js";
 import { AssetPackPanel } from "../components/builder/AssetPackPanel.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
-import { cloneAsset, deleteAsset, getAsset, iterateSvgAsset, updateAssetVisibility } from "../lib/api.js";
-import type { AssetResponse } from "../types/index.js";
+import { cloneAsset, deleteAsset, getAsset, iterateSvgAsset, subscribeJobStream, updateAssetVisibility } from "../lib/api.js";
+import type { AssetResponse, JobResponse } from "../types/index.js";
 import type {
   PreviewMode,
   BackgroundMode,
@@ -34,7 +35,9 @@ export default function AssetDetailPage() {
   const [mode, setMode] = useState<PreviewMode>("final");
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
-  const [isRefining, setIsRefining] = useState(false);
+  const [jobId, setJobId] = useState<string | undefined>();
+  const [job, setJob] = useState<JobResponse | undefined>();
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const {
@@ -73,15 +76,53 @@ export default function AssetDetailPage() {
     setPreviewSize("full");
   }, [assetId]);
 
+  useEffect(() => {
+    if (!jobId) return;
+
+    const unsubscribe = subscribeJobStream(jobId, {
+      onJob: async (incomingJob) => {
+        setJob(incomingJob);
+
+        if (incomingJob.status === 'completed' && incomingJob.assetId) {
+          await refetch();
+          await refreshUser({ silent: true });
+          setIsProcessing(false);
+        }
+
+        if (incomingJob.status === 'failed') {
+          setIsProcessing(false);
+        }
+      },
+      onError: () => {
+        setIsProcessing(false);
+      },
+      onModelToken: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, 'stageStreams', stage, content));
+      },
+      onReasoning: ({ stage, content }) => {
+        setJob((current) => appendJobStream(current, 'stageReasoningStreams', stage, content));
+      },
+      onTool: (event) => {
+        setJob((current) => appendJobToolEvent(current, event));
+      },
+      onClearStream: ({ stage }) => {
+        setJob((current) => clearJobStream(current, stage));
+      },
+    });
+
+    return () => unsubscribe();
+  }, [jobId, refetch, refreshUser]);
+
   const handleManualRefine = async (instruction: string) => {
     if (!asset) return;
-    setIsRefining(true);
+    setIsProcessing(true);
+    setJob(undefined);
     try {
-      await iterateSvgAsset({ assetId: asset.id, instruction });
-      await refetch();
-      await refreshUser({ silent: true });
-    } finally {
-      setIsRefining(false);
+      const result = await iterateSvgAsset({ assetId: asset.id, instruction });
+      setJobId(result.jobId);
+    } catch (error) {
+      setIsProcessing(false);
+      throw error;
     }
   };
 
@@ -159,15 +200,18 @@ export default function AssetDetailPage() {
         }
         centerPanel={
           <PreviewWorkspace
-            pipelineRail={<PipelineRail asset={asset} />}
+            pipelineRail={<PipelineRail asset={asset} currentStage={job?.currentStage} failed={job?.status === 'failed'} />}
             canvas={
               <PreviewCanvas
                 asset={asset}
                 mode={mode}
                 background={background}
                 previewSize={previewSize}
-                isLoading={isLoading}
-                isRefining={isRefining}
+                isLoading={isLoading || isProcessing}
+                currentStage={job?.currentStage}
+                loadingPreviewUrl={job?.latestPreviewUrl}
+                loadingIteration={job?.latestIteration}
+                loadingProgress={job?.progress}
               />
             }
             toolbar={
@@ -183,8 +227,8 @@ export default function AssetDetailPage() {
             refinementPrompt={
               asset ? (
                 <ManualRefinementPrompt
-                  disabled={isLoading || isRefining}
-                  isLoading={isRefining}
+                  disabled={isLoading || isProcessing}
+                  isLoading={isProcessing}
                   onSubmit={handleManualRefine}
                 />
               ) : undefined
@@ -195,6 +239,17 @@ export default function AssetDetailPage() {
           <div className="flex flex-col gap-4 p-4 overflow-y-auto h-full">
             {asset && (
               <>
+                {hasPipelineData(job) && (
+                  <PipelineFlowLogs
+                    logs={job.logs}
+                    currentStage={job.currentStage}
+                    failed={job.status === 'failed'}
+                    stageStreams={job.stageStreams}
+                    stageReasoningStreams={job.stageReasoningStreams}
+                    streamEvents={job.streamEvents}
+                    error={job.error}
+                  />
+                )}
                 <ExportButtons
                   assetId={asset.id}
                   svg={asset.finalSvg}
@@ -243,4 +298,65 @@ export default function AssetDetailPage() {
       />
     </StudioFrame>
   );
+}
+
+function appendJobStream(
+  current: JobResponse | undefined,
+  key: 'stageStreams' | 'stageReasoningStreams',
+  stage: string,
+  content: string,
+): JobResponse | undefined {
+  if (!current) return current;
+  return {
+    ...current,
+    [key]: {
+      ...(current[key] ?? {}),
+      [stage]: `${current[key]?.[stage] ?? ''}${content}`.slice(-5000),
+    },
+  };
+}
+
+function appendJobToolEvent(
+  current: JobResponse | undefined,
+  event: {
+    stage: string;
+    content: string;
+    at: string;
+    sequence: number;
+    toolName?: string;
+    toolStatus?: 'requested' | 'running' | 'completed' | 'failed';
+  },
+): JobResponse | undefined {
+  if (!current) return current;
+  return {
+    ...current,
+    streamEvents: [
+      ...(current.streamEvents ?? []),
+      {
+        sequence: event.sequence,
+        type: 'tool',
+        stage: event.stage,
+        content: event.content,
+        at: event.at,
+        toolName: event.toolName,
+        toolStatus: event.toolStatus,
+      },
+    ],
+  };
+}
+
+function clearJobStream(
+  current: JobResponse | undefined,
+  stage: string,
+): JobResponse | undefined {
+  if (!current) return current;
+  return {
+    ...current,
+    stageStreams: { ...(current.stageStreams ?? {}), [stage]: '' },
+    stageReasoningStreams: { ...(current.stageReasoningStreams ?? {}), [stage]: '' },
+  };
+}
+
+function hasPipelineData(job: JobResponse | undefined): job is JobResponse {
+  return Boolean(job && (job.logs.length > 0 || job.currentStage || job.status === 'running' || job.status === 'failed'));
 }

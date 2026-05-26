@@ -19,7 +19,8 @@ import { IssuesPanel } from "../components/builder/IssuesPanel.js";
 import { SvgCodeEditor } from "../components/builder/SvgCodeEditor.js";
 import { ManualRefinementPrompt } from "../components/builder/ManualRefinementPrompt.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
-import { clonePack, deleteAsset, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility } from "../lib/api.js";
+import { DuplicateDialog } from "../components/common/DuplicateDialog.js";
+import { clonePack, deleteAsset, getAsset, getPack, iterateSvgAsset, subscribeJobStream, updatePackVisibility, cloneAsset, assignAssetToPack } from "../lib/api.js";
 import type { AssetResponse, BackgroundMode, JobResponse, PreviewMode, PreviewSize } from "../types/index.js";
 import { useAuth } from "../auth/AuthContext.js";
 
@@ -35,9 +36,9 @@ export default function PackDetailPage() {
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefining, setIsRefining] = useState(false);
-  const [isLoadingAssetDetail, setIsLoadingAssetDetail] = useState(false);
+  const [, setIsLoadingAssetDetail] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<AssetResponse | undefined>();
+  const [assetToDuplicate, setAssetToDuplicate] = useState<AssetResponse | undefined>();
 
   const { data: pack, isLoading: isPackLoading, error, refetch } = useQuery({
     queryKey: ["pack", packId],
@@ -71,6 +72,22 @@ export default function PackDetailPage() {
     },
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: async ({ asset, name }: { asset: AssetResponse; name: string }) => {
+      const cloned = await cloneAsset(asset.id, name);
+      if (asset.packId) {
+        await assignAssetToPack(cloned.id, asset.packId);
+      }
+      return cloned;
+    },
+    onSuccess: async () => {
+      setAssetToDuplicate(undefined);
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+      await queryClient.invalidateQueries({ queryKey: ["assets", "list"] });
+    },
+  });
+
   const outlierIds = useMemo(() => pack?.outliers?.map((o) => o.assetId) ?? [], [pack?.outliers]);
   const activeAsset = selectedAsset ?? pack?.assets[0];
   const showingPreview = Boolean(selectedAsset || isLoading || job);
@@ -90,15 +107,9 @@ export default function PackDetailPage() {
       onJob: async (incomingJob) => {
         setJob(incomingJob);
 
-        if (incomingJob.status === "completed") {
-          const nextPack = await refetch();
-          if (incomingJob.assetId) {
-            const asset = await getAsset(incomingJob.assetId);
-            setSelectedAsset(asset);
-          } else {
-            setSelectedAsset(nextPack.data?.assets[0]);
-          }
-          await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+        if (incomingJob.status === "completed" && incomingJob.assetId) {
+          const result = await getAsset(incomingJob.assetId);
+          setSelectedAsset({ ...result, currentStage: incomingJob.currentStage });
           await refreshUser({ silent: true });
           setIsLoading(false);
         }
@@ -126,15 +137,16 @@ export default function PackDetailPage() {
   }, [jobId, queryClient, refetch, refreshUser]);
 
   const handleManualRefine = async (instruction: string) => {
-    if (!activeAsset) return;
-    setIsRefining(true);
+    if (!selectedAsset) return;
+    setJobId(undefined);
+    setJob(undefined);
+    setIsLoading(true);
     try {
-      const updated = await iterateSvgAsset({ assetId: activeAsset.id, instruction });
-      setSelectedAsset(updated);
-      await refetch();
-      await refreshUser({ silent: true });
-    } finally {
-      setIsRefining(false);
+      const result = await iterateSvgAsset({ assetId: selectedAsset.id, instruction });
+      setJobId(result.jobId);
+    } catch (error) {
+      setIsLoading(false);
+      throw error;
     }
   };
 
@@ -213,8 +225,7 @@ export default function PackDetailPage() {
                       mode={mode}
                       background={background}
                       previewSize={previewSize}
-                      isLoading={isLoading || isPackLoading || isLoadingAssetDetail}
-                      isRefining={isRefining}
+                      isLoading={isLoading}
                       currentStage={job?.currentStage}
                       loadingPreviewUrl={job?.latestPreviewUrl}
                       loadingIteration={job?.latestIteration}
@@ -234,8 +245,8 @@ export default function PackDetailPage() {
                   refinementPrompt={
                     activeAsset ? (
                       <ManualRefinementPrompt
-                        disabled={isLoading || isRefining}
-                        isLoading={isRefining}
+                        disabled={!selectedAsset || isLoading}
+                        isLoading={isLoading && Boolean(jobId)}
                         onSubmit={handleManualRefine}
                       />
                     ) : undefined
@@ -265,6 +276,7 @@ export default function PackDetailPage() {
                   emptyMessage="Add a SVG from the left command panel"
                   onRefine={handleSelectAsset}
                   onDelete={pack?.isOwner && !isGenerating ? setAssetToDelete : undefined}
+                  onDuplicate={pack?.isOwner && !isGenerating ? setAssetToDuplicate : undefined}
                   deletingAssetId={deleteMutation.isPending ? assetToDelete?.id : undefined}
                 />
               </div>
@@ -324,6 +336,20 @@ export default function PackDetailPage() {
         if (!open && !deleteMutation.isPending) setAssetToDelete(undefined);
       }}
     />
+    <DuplicateDialog
+      open={Boolean(assetToDuplicate)}
+      title="Duplicate Asset"
+      defaultName={assetToDuplicate ? getDefaultDuplicateName(assetToDuplicate.name || assetToDuplicate.prompt, (pack?.assets || []).map(a => a.name || a.prompt)) : ""}
+      isPending={duplicateMutation.isPending}
+      onOpenChange={(open) => {
+        if (!open) setAssetToDuplicate(undefined);
+      }}
+      onConfirm={(name) => {
+        if (assetToDuplicate) {
+          duplicateMutation.mutate({ asset: assetToDuplicate, name });
+        }
+      }}
+    />
     </>
   );
 }
@@ -349,10 +375,10 @@ function PackAssetStrip({
             background: "var(--bg)",
           }}
           onClick={() => onSelect(asset)}
-          title={asset.prompt}
+          title={asset.name || asset.prompt}
         >
           {asset.finalPngUrl ? (
-            <img src={asset.finalPngUrl} alt={asset.prompt} className="h-10 w-10 object-contain" />
+            <img src={asset.finalPngUrl} alt={asset.name || asset.prompt} className="h-10 w-10 object-contain" />
           ) : (
             <span className="h-5 w-5 animate-pulse" style={{ background: "var(--line)" }} />
           )}
@@ -385,6 +411,25 @@ function PackLoadError({ error }: { error: unknown }) {
       </p>
     </div>
   );
+}
+
+function getDefaultDuplicateName(baseName: string, existingNames: string[]): string {
+  const copyRegex = new RegExp(`^${escapeRegex(baseName)} - copy \\((\\d+)\\)$`);
+  let maxCopy = 0;
+
+  for (const name of existingNames) {
+    const match = name.match(copyRegex);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxCopy) maxCopy = num;
+    }
+  }
+
+  return `${baseName} - copy (${maxCopy + 1})`;
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function clearJobStream(job: JobResponse | undefined, stage: string): JobResponse | undefined {

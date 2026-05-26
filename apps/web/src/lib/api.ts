@@ -33,6 +33,7 @@ type RawIteration = {
 type RawAsset = {
   id?: string;
   assetId?: string;
+  name?: string | null;
   prompt?: string;
   assetType?: string;
   mode?: string;
@@ -192,8 +193,8 @@ export async function updatePackVisibility(packId: string, visibility: "private"
   await api.patch(`/api/packs/${packId}/visibility`, { visibility });
 }
 
-export async function cloneAsset(assetId: string): Promise<{ id: string }> {
-  const res = await api.post<ApiEnvelope<{ id: string }>>(`/api/assets/${assetId}/clone`);
+export async function cloneAsset(assetId: string, name?: string): Promise<{ id: string }> {
+  const res = await api.post<ApiEnvelope<{ id: string }>>(`/api/assets/${assetId}/clone`, { name });
   return unwrapEnvelope(res.data);
 }
 
@@ -334,19 +335,13 @@ export async function buildSvgPackAsset(
 
 export async function iterateSvgAsset(
   data: IterateSvgAssetRequest
-): Promise<AssetResponse> {
-  const res = await api.post<ApiEnvelope<{ assetId?: string } & RawAsset>>(
+): Promise<{ jobId: string }> {
+  const res = await api.post<ApiEnvelope<{ jobId: string }>>(
     "/api/assets/svg/iterate",
     data
   );
   const payload = unwrapEnvelope(res.data);
-
-  if (payload.assetId) {
-    return getAsset(payload.assetId);
-  }
-
-  const finalSvg = await fetchSvgContent(payload.finalSvgPath);
-  return normalizeAsset(payload, finalSvg);
+  return { jobId: payload.jobId };
 }
 
 export async function renderSvg(data: RenderSvgRequest): Promise<{ pngUrl: string }> {
@@ -508,6 +503,7 @@ function normalizeAsset(raw: RawAsset, finalSvg?: string): AssetResponse {
     id: raw.id ?? raw.assetId ?? "",
     packId: raw.packId ?? raw.pack?.id ?? null,
     pack: raw.pack ?? null,
+    name: raw.name ?? null,
     prompt: raw.prompt ?? "",
     assetType: raw.assetType ?? "icon",
     mode: raw.mode ?? "direct",

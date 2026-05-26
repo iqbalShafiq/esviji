@@ -1,17 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { deleteAsset, listAssets } from "../lib/api.js";
+import { deleteAsset, listAssets, cloneAsset, assignAssetToPack } from "../lib/api.js";
 import type { AssetListItem } from "../lib/api.js";
 import { StudioFrame } from "../components/layout/StudioFrame.js";
 import { ConfirmationDialog } from "../components/common/ConfirmationDialog.js";
+import { DuplicateDialog } from "../components/common/DuplicateDialog.js";
 import { useState } from "react";
+
+function getDefaultDuplicateName(baseName: string, existingNames: string[]): string {
+  const copyRegex = new RegExp(`^${escapeRegex(baseName)} - copy \\((\\d+)\\)$`);
+  let maxCopy = 0;
+
+  for (const name of existingNames) {
+    const match = name.match(copyRegex);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxCopy) maxCopy = num;
+    }
+  }
+
+  return `${baseName} - copy (${maxCopy + 1})`;
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function AssetHistoryCard({
   asset,
   onDelete,
+  onDuplicate,
 }: {
   asset: AssetListItem;
   onDelete: (asset: AssetListItem) => void;
+  onDuplicate: (asset: AssetListItem) => void;
 }) {
   const previewUrl = asset.latestPngPreviewPath || asset.finalPngPath || undefined;
   const hasBestIteration = asset.bestIterationNumber && asset.bestIterationNumber > 0;
@@ -101,15 +123,33 @@ function AssetHistoryCard({
         <p className="text-[10px]" style={{ color: "var(--muted)" }}>
           {formatDate(asset.createdAt)}
         </p>
-        <button
-          type="button"
-          className="px-2.5 py-1.5 text-[10px] font-semibold transition-colors"
-          style={{ background: "var(--red)", color: "#ffffff" }}
-          onClick={() => onDelete(asset)}
-          aria-label={`Delete ${asset.name || asset.prompt}`}
-        >
-          Delete
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="px-2.5 py-1.5 text-[10px] font-semibold transition-colors disabled:opacity-50"
+            style={{ background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--line)" }}
+            onClick={() => onDuplicate(asset)}
+            aria-label={`Duplicate ${asset.name || asset.prompt}`}
+            title="Duplicate asset"
+          >
+            <span className="flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M6 1.5H10.5C11.6046 1.5 12.5 2.39543 12.5 3.5V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Duplicate
+            </span>
+          </button>
+          <button
+            type="button"
+            className="px-2.5 py-1.5 text-[10px] font-semibold transition-colors"
+            style={{ background: "var(--red)", color: "#ffffff" }}
+            onClick={() => onDelete(asset)}
+            aria-label={`Delete ${asset.name || asset.prompt}`}
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -135,6 +175,7 @@ function formatDate(dateStr: string): string {
 export default function HistoryPage() {
   const queryClient = useQueryClient();
   const [assetToDelete, setAssetToDelete] = useState<AssetListItem | undefined>();
+  const [assetToDuplicate, setAssetToDuplicate] = useState<AssetListItem | undefined>();
   const { data: assets, isLoading, error } = useQuery({
     queryKey: ["assets", "list"],
     queryFn: listAssets,
@@ -148,6 +189,29 @@ export default function HistoryPage() {
       await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
     },
   });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async ({ asset, name }: { asset: AssetListItem; name: string }) => {
+      const cloned = await cloneAsset(asset.id, name);
+      if (asset.packId) {
+        await assignAssetToPack(cloned.id, asset.packId);
+      }
+      return cloned;
+    },
+    onSuccess: async (_, { asset }) => {
+      setAssetToDuplicate(undefined);
+      await queryClient.invalidateQueries({ queryKey: ["assets", "list"] });
+      await queryClient.invalidateQueries({ queryKey: ["pack", asset.packId] });
+      await queryClient.invalidateQueries({ queryKey: ["packs", "list"] });
+    },
+  });
+
+  const defaultDuplicateName = assetToDuplicate
+    ? getDefaultDuplicateName(
+        assetToDuplicate.name || assetToDuplicate.prompt,
+        (assets || []).map((a) => a.name || a.prompt)
+      )
+    : "";
 
   return (
     <StudioFrame>
@@ -201,6 +265,7 @@ export default function HistoryPage() {
                   key={asset.id}
                   asset={asset}
                   onDelete={setAssetToDelete}
+                  onDuplicate={setAssetToDuplicate}
                 />
               ))}
             </div>
@@ -221,6 +286,20 @@ export default function HistoryPage() {
         }}
         onConfirm={() => {
           if (assetToDelete) deleteMutation.mutate(assetToDelete.id);
+        }}
+      />
+      <DuplicateDialog
+        open={Boolean(assetToDuplicate)}
+        title="Duplicate Asset"
+        defaultName={defaultDuplicateName}
+        isPending={duplicateMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open) setAssetToDuplicate(undefined);
+        }}
+        onConfirm={(name) => {
+          if (assetToDuplicate) {
+            duplicateMutation.mutate({ asset: assetToDuplicate, name });
+          }
         }}
       />
     </StudioFrame>

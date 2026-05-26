@@ -140,22 +140,38 @@ export class SvgAssetsController {
     if (reservedTokens === undefined) return;
 
     try {
-      const asset = await this.orchestrator.iterate(parseResult.data, { ownerId: user.id, isAdmin: user.role === 'admin' });
-      reply.status(200).send({
-        success: true,
-        data: {
-          assetId: asset.id,
-          status: asset.status,
-          currentIteration: asset.currentIteration,
-          finalSvgPath: asset.finalSvgPath,
-          finalPngPath: asset.finalPngPath,
-          updatedAt: asset.updatedAt,
-        },
-      });
+      const jobId = generateId('job');
+      const job = await this.jobService.create({ jobId, assetId: parseResult.data.assetId });
+
+      void (async () => {
+        try {
+          await this.jobService.start(jobId);
+          const asset = await this.orchestrator.iterate(parseResult.data, {
+            ownerId: user.id,
+            isAdmin: user.role === 'admin',
+            onStage: (stage, message, progress) => {
+              if (shouldClearStageOutput(message)) void this.jobService.clearStageOutput(jobId, stage);
+              void this.jobService.stage(jobId, stage, progress, message);
+            },
+            onLlmToken: (stage, token) => void this.jobService.appendStageStream(jobId, stage, token),
+            onReasoning: (stage, message) => void this.jobService.appendStageReasoning(jobId, stage, message),
+            onToolEvent: (stage, event) => void this.jobService.appendToolEvent(jobId, stage, event),
+            onIterationRendered: (iteration, previewUrl) => void this.jobService.setLatestPreview(jobId, previewUrl, iteration),
+          });
+          await this.jobService.attachAsset(jobId, asset.id);
+          await this.jobService.complete(jobId);
+        } catch (error) {
+          await this.tokenService.refund(user.id, reservedTokens);
+          await this.jobService.fail(jobId, error instanceof Error ? error.message : 'Refine failed');
+          logger.error({ error, body: parseResult.data }, 'Background refine failed');
+        }
+      })();
+
+      reply.status(202).send({ success: true, data: { jobId: job.jobId, status: job.status, progress: job.progress } });
     } catch (error) {
       await this.tokenService.refund(user.id, reservedTokens);
-      logger.error({ error, body: parseResult.data }, 'Failed to iterate SVG asset');
-      sendServerError(reply, error, 'Failed to iterate asset');
+      logger.error({ error, body: parseResult.data }, 'Failed to start SVG asset refine');
+      sendServerError(reply, error, 'Failed to start asset refine');
     }
   }
 
@@ -253,18 +269,37 @@ export class SvgAssetsController {
     reply.status(200).send({ success: true, data: updated });
   }
 
-  async clone(request: FastifyRequest<{ Params: { assetId: string } }>, reply: FastifyReply): Promise<void> {
+  async clone(request: FastifyRequest<{ Params: { assetId: string }; Body: unknown }>, reply: FastifyReply): Promise<void> {
     const user = await requireAuthUser(request, reply);
     if (!user) return;
-    const source = await prisma.asset.findUnique({ where: { id: request.params.assetId }, include: { iterations: { orderBy: { iterationNumber: 'asc' } } } });
+    const source = await prisma.asset.findUnique({ where: { id: request.params.assetId }, include: { iterations: { orderBy: { iterationNumber: 'asc' } }, pack: { select: { ownerId: true } } } });
     if (!source) return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: 'Asset not found' });
-    if (source.visibility !== 'public' && source.ownerId !== user.id && user.role !== 'admin') return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Only public assets can be cloned' });
+    const canClone = source.visibility === 'public' || source.ownerId === user.id || source.pack?.ownerId === user.id || user.role === 'admin';
+    if (!canClone) return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Only public assets can be cloned' });
+
+    const parseResult = CloneAssetRequestSchema.safeParse(request.body ?? {});
+    if (!parseResult.success) return sendValidationError(reply, parseResult.error.format());
+    const cloneName = parseResult.data.name;
+
+    if (cloneName) {
+      const existingName = await prisma.asset.findFirst({
+        where: { ownerId: user.id, name: cloneName },
+        select: { id: true },
+      });
+      if (existingName) {
+        return reply.status(409).send({
+          statusCode: 409,
+          error: 'Conflict',
+          message: 'Asset name already exists. Please choose a different name.',
+        });
+      }
+    }
 
     const cloned = await prisma.asset.create({
       data: {
         ownerId: user.id,
         sourceAssetId: source.id,
-        name: source.name,
+        name: cloneName ?? source.name,
         prompt: source.prompt,
         assetType: source.assetType,
         mode: source.mode,
@@ -375,6 +410,7 @@ export class SvgAssetsController {
 
 const UpdateAssetPackRequestSchema = z.object({ packId: z.string().min(1).nullable() });
 const VisibilitySchema = z.object({ visibility: z.enum(['private', 'public']) });
+const CloneAssetRequestSchema = z.object({ name: z.string().trim().min(1).optional() });
 
 async function updatePackQuantity(packId: string): Promise<void> {
   const count = await prisma.asset.count({ where: { packId } });

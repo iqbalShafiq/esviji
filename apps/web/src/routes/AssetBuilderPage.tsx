@@ -42,7 +42,6 @@ export default function AssetBuilderPage() {
   const [background, setBackground] = useState<BackgroundMode>("transparent");
   const [previewSize, setPreviewSize] = useState<PreviewSize>("full");
   const [isLoading, setIsLoading] = useState(false);
-  const [isRefining, setIsRefining] = useState(false);
 
   const { data: loadedAsset } = useQuery({
     queryKey: ["asset", loadAssetId],
@@ -79,21 +78,21 @@ export default function AssetBuilderPage() {
     setJob(undefined);
     setJobId(undefined);
     setIsLoading(false);
-    setIsRefining(false);
   };
 
   const handleManualRefine = async (instruction: string) => {
     if (!asset) return;
-    setIsRefining(true);
+    setIsLoading(true);
+    setJob(undefined);
     try {
       const result = await iterateSvgAsset({
         assetId: asset.id,
         instruction,
       });
-      setAsset(result);
-      await refreshUser({ silent: true });
-    } finally {
-      setIsRefining(false);
+      setJobId(result.jobId);
+    } catch (error) {
+      setIsLoading(false);
+      throw error;
     }
   };
 
@@ -211,7 +210,6 @@ export default function AssetBuilderPage() {
                 background={background}
                 previewSize={previewSize}
                 isLoading={isLoading}
-                isRefining={isRefining}
                 currentStage={job?.currentStage}
                 loadingPreviewUrl={job?.latestPreviewUrl}
                 loadingIteration={job?.latestIteration}
@@ -231,8 +229,8 @@ export default function AssetBuilderPage() {
             refinementPrompt={
               asset ? (
                 <ManualRefinementPrompt
-                  disabled={!asset || isLoading || isRefining}
-                  isLoading={isRefining}
+                  disabled={!asset || isLoading}
+                  isLoading={isLoading && Boolean(jobId)}
                   onSubmit={handleManualRefine}
                 />
               ) : undefined

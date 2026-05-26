@@ -7,6 +7,7 @@ interface AssetCardProps {
   isOutlier?: boolean;
   onRefine?: (asset: AssetResponse) => void;
   onDelete?: (asset: AssetResponse) => void;
+  onDuplicate?: (asset: AssetResponse) => void;
   isDeleting?: boolean;
 }
 
@@ -31,7 +32,7 @@ function getStatusBadge(status: AssetResponse["status"]) {
   }
 }
 
-export function AssetCard({ asset, isOutlier, onRefine, onDelete, isDeleting = false }: AssetCardProps) {
+export function AssetCard({ asset, isOutlier, onRefine, onDelete, onDuplicate, isDeleting = false }: AssetCardProps) {
   const avgScore = useMemo(() => {
     if (!asset.evaluation?.scores) return null;
     const values = Object.values(asset.evaluation.scores);
@@ -106,9 +107,9 @@ export function AssetCard({ asset, isOutlier, onRefine, onDelete, isDeleting = f
           <p
             className="text-sm font-medium truncate"
             style={{ color: "var(--ink)", fontFamily: "var(--font-body)" }}
-            title={asset.prompt}
+            title={asset.name || asset.prompt}
           >
-            {asset.prompt}
+            {asset.name || asset.prompt}
           </p>
           {avgScore !== null && (
             <span
@@ -163,6 +164,24 @@ export function AssetCard({ asset, isOutlier, onRefine, onDelete, isDeleting = f
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1V9M7 9L4 6M7 9L10 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={() => onDuplicate(asset)}
+              className="p-1.5 border transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Duplicate asset"
+              style={{
+                borderColor: "var(--line)",
+                color: "var(--ink)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M6 1.5H10.5C11.6046 1.5 12.5 2.39543 12.5 3.5V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </button>
           )}

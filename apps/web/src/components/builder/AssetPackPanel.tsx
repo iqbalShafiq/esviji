@@ -118,7 +118,7 @@ export function AssetPackPanel({
           style={{ borderColor: "var(--line)", background: "var(--bg)" }}
         >
           <p className="text-xs font-semibold" style={{ color: "var(--ink)" }}>
-            {asset.prompt}
+            {asset.name || asset.prompt}
           </p>
           <p className="mt-2 text-[10px] font-mono" style={{ color: "var(--muted)" }}>
             Created {formatDate(asset.createdAt)}

@@ -51,6 +51,45 @@ export function calculateBuildGraphRecursionLimit(maxIterations: number): number
   );
 }
 
+type SvgPipelineCallbacks = {
+  onStage?: (stage: PipelineStage, message: string, progress: number) => void;
+  onIterationRendered?: (iteration: number, previewUrl: string) => void;
+  onLlmToken?: (stage: PipelineStage, token: string) => void;
+  onReasoning?: (stage: PipelineStage, message: string) => void;
+  onToolEvent?: (
+    stage: PipelineStage,
+    event: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string }
+  ) => void;
+};
+
+type PersistedIterationContext = {
+  iterationNumber: number;
+  brief: Prisma.JsonValue;
+  styleSystem: Prisma.JsonValue;
+  referenceAnalysis: Prisma.JsonValue | null;
+  layout: Prisma.JsonValue;
+  svgDraftPath: string | null;
+  pngPreviewPath: string | null;
+  debugPreviewPath: string | null;
+  scores: Prisma.JsonValue | null;
+  issues: Prisma.JsonValue | null;
+  actionTaken: Prisma.JsonValue | null;
+};
+
+type SvgBuildOptions = SvgPipelineCallbacks & {
+  sharedStyleSystem?: StyleSystem;
+  packConsistencyContext?: string;
+  packId?: string;
+  name?: string;
+  ownerId?: string;
+  visibility?: string;
+};
+
+type SvgIterateOptions = SvgPipelineCallbacks & {
+  ownerId?: string;
+  isAdmin?: boolean;
+};
+
 export class SvgBuildOrchestrator {
   constructor(
     private classifier: AssetTypeClassifierService,
@@ -70,25 +109,7 @@ export class SvgBuildOrchestrator {
     private svgGenerationWorkflow: SvgGenerationWorkflowService
   ) {}
 
-  async build(
-    request: BuildSvgAssetRequest,
-    options?: {
-      sharedStyleSystem?: StyleSystem;
-      packConsistencyContext?: string;
-      packId?: string;
-      name?: string;
-      ownerId?: string;
-      visibility?: string;
-      onStage?: (stage: import('@svg-builder/shared').PipelineStage, message: string, progress: number) => void;
-      onIterationRendered?: (iteration: number, previewUrl: string) => void;
-      onLlmToken?: (stage: import('@svg-builder/shared').PipelineStage, token: string) => void;
-      onReasoning?: (stage: import('@svg-builder/shared').PipelineStage, message: string) => void;
-      onToolEvent?: (
-        stage: import('@svg-builder/shared').PipelineStage,
-        event: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string }
-      ) => void;
-    }
-  ): Promise<Asset> {
+  async build(request: BuildSvgAssetRequest, options?: SvgBuildOptions): Promise<Asset> {
     const asset = await prisma.asset.create({
       data: {
         packId: options?.packId,
@@ -486,7 +507,7 @@ export class SvgBuildOrchestrator {
     }
   }
 
-  async iterate(request: IterateSvgAssetRequest, options?: { ownerId?: string; isAdmin?: boolean }): Promise<Asset> {
+  async iterate(request: IterateSvgAssetRequest, options?: SvgIterateOptions): Promise<Asset> {
     const asset = await prisma.asset.findUnique({
       where: { id: request.assetId },
       include: { iterations: { orderBy: { iterationNumber: 'desc' }, take: 1 } },
@@ -524,99 +545,7 @@ export class SvgBuildOrchestrator {
         data: { status: 'processing' },
       });
 
-      // Generate new SVG with user instruction
-      const initialSvg = await this.svgCoder.code(brief, styleSystem, layout, {
-        previousSvg,
-        revisionInstruction: request.instruction,
-      });
-      const generated = await this.svgGenerationWorkflow.run({
-        brief,
-        styleSystem,
-        layout,
-        width: asset.width,
-        height: asset.height,
-        initialSvg,
-        revisionInstruction: request.instruction,
-      });
-      const currentSvg = generated.svg;
-
-      // Render
-      const { pngPath, pngUrl } = await this.svgRender.render(
-        currentSvg,
-        asset.id,
-        newIterationNumber,
-        asset.width,
-        asset.height
-      );
-
-      // Debug overlay
-      const { debugPngPath } = await this.debugOverlay.generate(layout, currentSvg, asset.id, newIterationNumber);
-
-      // Evaluate
-      const classification: AssetTypeClassification = {
-        assetType: asset.assetType,
-        quantity: 1,
-        useCase: 'general',
-        requiresConsistency: false,
-        requiresSmallSizeReadability: false,
-        requiresTileability: false,
-        requiresBrandOriginality: false,
-        requiresReferenceMatching: false,
-      };
-
-      const evaluation = await this.evaluator.evaluate(
-        classification,
-        brief,
-        styleSystem,
-        layout,
-        pngPath,
-        latestIteration.referenceAnalysis ?? undefined,
-        {
-          svgSource: currentSvg,
-          validationSummary: generated.validationSummary,
-          previousEvaluationContext: {
-            iteration: latestIteration.iterationNumber,
-            scores: latestIteration.scores,
-            issues: latestIteration.issues,
-            revisionPlan: latestIteration.actionTaken,
-          },
-        }
-      );
-
-      // Save iteration
-      await prisma.assetIteration.create({
-        data: {
-          assetId: asset.id,
-          iterationNumber: newIterationNumber,
-          brief: brief as unknown as Prisma.JsonValue,
-          styleSystem: styleSystem as unknown as Prisma.JsonValue,
-          referenceAnalysis: latestIteration.referenceAnalysis,
-          layout: layout as unknown as Prisma.JsonValue,
-          svgDraftPath: currentSvg,
-          pngPreviewPath: pngUrl,
-          debugPreviewPath: debugPngPath,
-          scores: evaluation.scores as unknown as Prisma.JsonValue,
-          issues: evaluation.issues as unknown as Prisma.JsonValue,
-          actionTaken: { instruction: request.instruction } as unknown as Prisma.JsonValue,
-        },
-      });
-
-      // Save final
-      const sanitizedSvg = sanitizeSvg(currentSvg);
-      const optimizationResult = await this.svgOptimizer.optimize(sanitizedSvg);
-      const finalSvgPath = await this.storage.saveAssetFile(asset.id, 'final.svg', optimizationResult.optimizedSvg);
-      const finalSvgUrl = `/${finalSvgPath}`;
-
-      const updatedAsset = await prisma.asset.update({
-        where: { id: asset.id },
-        data: {
-          status: 'completed',
-          currentIteration: newIterationNumber,
-          finalSvgPath: finalSvgUrl,
-          finalPngPath: pngUrl,
-          finalScores: evaluation.scores as unknown as Prisma.JsonValue,
-        },
-      });
+      const updatedAsset = await this.runManualRefineGraph(asset, latestIteration as unknown as PersistedIterationContext, request, options);
 
       logger.info({ assetId: asset.id }, 'Manual iteration completed');
       return updatedAsset;
@@ -635,22 +564,7 @@ export class SvgBuildOrchestrator {
   private async runBuildGraph(
     asset: Asset,
     request: BuildSvgAssetRequest,
-    options: {
-      sharedStyleSystem?: StyleSystem;
-      packConsistencyContext?: string;
-      packId?: string;
-      name?: string;
-      ownerId?: string;
-      visibility?: string;
-      onStage?: (stage: PipelineStage, message: string, progress: number) => void;
-      onIterationRendered?: (iteration: number, previewUrl: string) => void;
-      onLlmToken?: (stage: PipelineStage, token: string) => void;
-      onReasoning?: (stage: PipelineStage, message: string) => void;
-      onToolEvent?: (
-        stage: PipelineStage,
-        event: { name: string; status: 'requested' | 'running' | 'completed' | 'failed'; message: string }
-      ) => void;
-    } | undefined,
+    options: SvgBuildOptions | undefined,
     reportRetry: (stage: PipelineStage, attempt: number, maxRetries: number, error: Error) => void
   ): Promise<Asset> {
     const issueTracker = new IssueTracker();
@@ -1122,6 +1036,181 @@ export class SvgBuildOrchestrator {
     return requireState(result.finalAsset, 'finalAsset');
   }
 
+  private async runManualRefineGraph(
+    asset: Asset,
+    latestIteration: PersistedIterationContext,
+    request: IterateSvgAssetRequest,
+    options?: SvgIterateOptions
+  ): Promise<Asset> {
+    type ValidationSummary = { valid: boolean; errors: string[]; warnings: string[] };
+    const newIterationNumber = asset.currentIteration + 1;
+    const brief = latestIteration.brief as unknown as CreativeBrief;
+    const styleSystem = latestIteration.styleSystem as unknown as StyleSystem;
+    const layout = latestIteration.layout as unknown as LayoutBlueprint;
+    const previousSvg = latestIteration.svgDraftPath ?? '';
+    const referenceAnalysis = latestIteration.referenceAnalysis ?? undefined;
+
+    const RefineState = Annotation.Root({
+      currentSvg: Annotation<string>(),
+      lastValidationSummary: Annotation<ValidationSummary | undefined>(),
+      pngPath: Annotation<string | undefined>(),
+      pngUrl: Annotation<string | undefined>(),
+      debugPngPath: Annotation<string | undefined>(),
+      evaluation: Annotation<EvaluationResult | undefined>(),
+      finalAsset: Annotation<Asset | undefined>(),
+    });
+
+    type RefineStateValue = typeof RefineState.State;
+    const requireState = <T>(value: T | undefined, name: string): T => {
+      if (value === undefined || value === null) {
+        throw new Error(`LangGraph refine state missing required field: ${name}`);
+      }
+      return value;
+    };
+
+    const classification: AssetTypeClassification = {
+      assetType: asset.assetType,
+      quantity: 1,
+      useCase: 'general',
+      requiresConsistency: Boolean(asset.packId),
+      requiresSmallSizeReadability: false,
+      requiresTileability: false,
+      requiresBrandOriginality: false,
+      requiresReferenceMatching: Boolean(asset.referenceImageUrl),
+    };
+
+    const refineInstruction = buildManualRefineInstruction({
+      instruction: request.instruction,
+      previousSvg,
+      previousPngPreviewPath: latestIteration.pngPreviewPath,
+      previousDebugPreviewPath: latestIteration.debugPreviewPath,
+      previousScores: latestIteration.scores,
+      previousIssues: latestIteration.issues,
+      previousActionTaken: latestIteration.actionTaken,
+      finalSvgPath: asset.finalSvgPath,
+      finalPngPath: asset.finalPngPath,
+      finalScores: asset.finalScores,
+    });
+
+    const graph = new StateGraph(RefineState)
+      .addNode('generate_svg', async () => {
+        options?.onStage?.('svg', `Refining SVG iteration ${newIterationNumber}`, 50);
+        const initialSvg = await this.svgCoder.code(brief, styleSystem, layout, {
+          previousSvg,
+          revisionInstruction: refineInstruction,
+          onToken: (token) => options?.onLlmToken?.('svg', token),
+          onReasoning: (token) => options?.onReasoning?.('svg', token),
+        });
+        const generated = await this.svgGenerationWorkflow.run({
+          brief,
+          styleSystem,
+          layout,
+          width: asset.width,
+          height: asset.height,
+          initialSvg,
+          revisionInstruction: refineInstruction,
+          onToken: (token) => options?.onLlmToken?.('svg', token),
+          onReasoning: (token) => options?.onReasoning?.('svg', token),
+          onToolEvent: (message) => {
+            const toolEvent = parseRepairToolEvent(message);
+            if (toolEvent) options?.onToolEvent?.('svg', toolEvent);
+            options?.onStage?.('svg', message, 52);
+          },
+        });
+        options?.onStage?.('svg', `Refined SVG ready (${Math.round(generated.svg.length / 1024)} KB)`, 56);
+        return { currentSvg: generated.svg, lastValidationSummary: generated.validationSummary };
+      })
+      .addNode('render_preview', async (state: RefineStateValue) => {
+        options?.onStage?.('render', `Rendering refined preview iteration ${newIterationNumber}`, 60);
+        const { pngPath, pngUrl } = await this.svgRender.render(state.currentSvg, asset.id, newIterationNumber, asset.width, asset.height);
+        options?.onIterationRendered?.(newIterationNumber, pngUrl);
+        const { debugPngPath } = await this.debugOverlay.generate(layout, state.currentSvg, asset.id, newIterationNumber);
+        return { pngPath, pngUrl, debugPngPath };
+      })
+      .addNode('evaluate', async (state: RefineStateValue) => {
+        const pngPath = requireState(state.pngPath, 'pngPath');
+        options?.onStage?.('evaluate', `Evaluating refined iteration ${newIterationNumber}`, 70);
+        const evaluation = await this.evaluator.evaluate(classification, brief, styleSystem, layout, pngPath, referenceAnalysis, {
+          onToken: (token) => options?.onLlmToken?.('evaluate', token),
+          onReasoning: (token) => options?.onReasoning?.('evaluate', token),
+          svgSource: state.currentSvg,
+          validationSummary: state.lastValidationSummary,
+          previousEvaluationContext: {
+            iteration: latestIteration.iterationNumber,
+            scores: latestIteration.scores,
+            issues: latestIteration.issues,
+            revisionPlan: latestIteration.actionTaken,
+          },
+        });
+        options?.onStage?.('evaluate', `Evaluation: ${Object.entries(evaluation.scores).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', ')}`, 74);
+        await prisma.assetIteration.create({
+          data: {
+            assetId: asset.id,
+            iterationNumber: newIterationNumber,
+            brief: brief as unknown as Prisma.JsonValue,
+            styleSystem: styleSystem as unknown as Prisma.JsonValue,
+            referenceAnalysis: latestIteration.referenceAnalysis ?? Prisma.JsonNull,
+            layout: layout as unknown as Prisma.JsonValue,
+            svgDraftPath: state.currentSvg,
+            pngPreviewPath: requireState(state.pngUrl, 'pngUrl'),
+            debugPreviewPath: requireState(state.debugPngPath, 'debugPngPath'),
+            scores: evaluation.scores as unknown as Prisma.JsonValue,
+            issues: evaluation.issues as unknown as Prisma.JsonValue,
+            actionTaken: { instruction: request.instruction, context: 'manual_refine' } as unknown as Prisma.JsonValue,
+          },
+        });
+        await prisma.asset.update({ where: { id: asset.id }, data: { currentIteration: newIterationNumber } });
+        return { evaluation };
+      })
+      .addNode('optimize_export', async (state: RefineStateValue) => {
+        const evaluation = requireState(state.evaluation, 'evaluation');
+        options?.onStage?.('optimize', 'Sanitizing and optimizing refined SVG', 90);
+        const sanitizedSvg = sanitizeSvg(state.currentSvg);
+        const optimizationResult = await this.svgOptimizer.optimize(sanitizedSvg);
+        options?.onStage?.('export', 'Saving refined outputs', 98);
+        const finalSvgPath = await this.storage.saveAssetFile(asset.id, 'final.svg', optimizationResult.optimizedSvg);
+        const finalSvgUrl = `/${finalSvgPath}`;
+        const finalPngUrl = (await this.svgRender.render(optimizationResult.optimizedSvg, asset.id, 999, asset.width, asset.height)).pngUrl;
+        const updatedAsset = await prisma.asset.update({
+          where: { id: asset.id },
+          data: {
+            status: 'completed',
+            currentIteration: newIterationNumber,
+            finalSvgPath: finalSvgUrl,
+            finalPngPath: finalPngUrl,
+            finalScores: evaluation.scores as unknown as Prisma.JsonValue,
+          },
+        });
+        options?.onStage?.('export', 'Refined outputs saved', 100);
+        return { finalAsset: updatedAsset };
+      })
+      .addEdge(START, 'generate_svg')
+      .addEdge('generate_svg', 'render_preview')
+      .addEdge('render_preview', 'evaluate')
+      .addEdge('evaluate', 'optimize_export')
+      .addEdge('optimize_export', END)
+      .compile();
+
+    const result = await graph.invoke(
+      {
+        currentSvg: previousSvg,
+        lastValidationSummary: undefined,
+        pngPath: undefined,
+        pngUrl: undefined,
+        debugPngPath: undefined,
+        evaluation: undefined,
+        finalAsset: undefined,
+      },
+      {
+        configurable: { thread_id: `${asset.id}:refine:${newIterationNumber}` },
+        runName: 'svg_asset_refine_pipeline',
+        recursionLimit: 8,
+      }
+    );
+
+    return requireState(result.finalAsset, 'finalAsset');
+  }
+
   private retryProgressForStage(stage: import('@svg-builder/shared').PipelineStage): number {
     const progressByStage: Record<import('@svg-builder/shared').PipelineStage, number> = {
       classify: 11,
@@ -1359,4 +1448,39 @@ function deepMerge(base: unknown, patch: unknown): unknown {
     merged[key] = deepMerge(baseRecord[key], value);
   }
   return merged;
+}
+
+function buildManualRefineInstruction(input: {
+  instruction: string;
+  previousSvg: string;
+  previousPngPreviewPath?: string | null;
+  previousDebugPreviewPath?: string | null;
+  previousScores?: unknown;
+  previousIssues?: unknown;
+  previousActionTaken?: unknown;
+  finalSvgPath?: string | null;
+  finalPngPath?: string | null;
+  finalScores?: unknown;
+}): string {
+  return [
+    'Manual refine request. Run exactly one high-quality refine pass using the previous final asset context.',
+    `User instruction: ${input.instruction}`,
+    'Previous final context:',
+    `- Previous SVG source length: ${input.previousSvg.length} characters`,
+    `- Previous PNG preview: ${input.previousPngPreviewPath ?? input.finalPngPath ?? 'not available'}`,
+    `- Previous debug preview: ${input.previousDebugPreviewPath ?? 'not available'}`,
+    `- Previous scores: ${safeJsonForPrompt(input.previousScores ?? input.finalScores ?? null)}`,
+    `- Previous unresolved issues: ${safeJsonForPrompt(input.previousIssues ?? [])}`,
+    `- Previous action/revision plan: ${safeJsonForPrompt(input.previousActionTaken ?? null)}`,
+    `- Final SVG path: ${input.finalSvgPath ?? 'not available'}`,
+    'If the user instruction is broad, infer the requested changes from the previous unresolved issues, scores, visual context, and SVG source. Preserve working parts unless the issues require replacing them.',
+  ].join('\n');
+}
+
+function safeJsonForPrompt(value: unknown): string {
+  try {
+    return JSON.stringify(value ?? null).slice(0, 4000);
+  } catch {
+    return 'null';
+  }
 }

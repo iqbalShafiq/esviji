@@ -7,10 +7,11 @@ interface AssetGridProps {
   emptyMessage?: string;
   onRefine?: (asset: AssetResponse) => void;
   onDelete?: (asset: AssetResponse) => void;
+  onDuplicate?: (asset: AssetResponse) => void;
   deletingAssetId?: string;
 }
 
-export function AssetGrid({ assets, outlierIds = [], emptyMessage = "Generate a pack to see assets here", onRefine, onDelete, deletingAssetId }: AssetGridProps) {
+export function AssetGrid({ assets, outlierIds = [], emptyMessage = "Generate a pack to see assets here", onRefine, onDelete, onDuplicate, deletingAssetId }: AssetGridProps) {
   if (assets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center gap-2 p-8">
@@ -41,6 +42,7 @@ export function AssetGrid({ assets, outlierIds = [], emptyMessage = "Generate a 
           isOutlier={outlierIds.includes(asset.id)}
           onRefine={onRefine}
           onDelete={onDelete}
+          onDuplicate={onDuplicate}
           isDeleting={deletingAssetId === asset.id}
         />
       ))}

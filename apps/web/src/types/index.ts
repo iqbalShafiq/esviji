@@ -25,6 +25,7 @@ export interface AssetResponse {
   id: string;
   packId?: string | null;
   pack?: PackSummary | null;
+  name?: string | null;
   prompt: string;
   assetType: string;
   mode: string;

@@ -1,0 +1,196 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+interface DuplicateDialogProps {
+  open: boolean;
+  title: string;
+  defaultName: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isPending?: boolean;
+  onConfirm: (name: string) => void;
+  onOpenChange: (open: boolean) => void;
+}
+
+const FOCUSABLE_SELECTOR =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+export function DuplicateDialog({
+  open,
+  title,
+  defaultName,
+  confirmLabel = "Duplicate",
+  cancelLabel = "Cancel",
+  isPending = false,
+  onConfirm,
+  onOpenChange,
+}: DuplicateDialogProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const [name, setName] = useState(defaultName);
+
+  useEffect(() => {
+    if (open) {
+      setName(defaultName);
+    }
+  }, [open, defaultName]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    lastActiveElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    inputRef.current?.focus();
+    inputRef.current?.select();
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      lastActiveElementRef.current?.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isPending) {
+        onOpenChange(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+      ).filter((element) => !element.hasAttribute("disabled"));
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isPending, onOpenChange, open]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      aria-hidden={false}
+    >
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default"
+        style={{ background: "rgba(7, 17, 31, 0.48)" }}
+        aria-label="Close duplicate dialog"
+        disabled={isPending}
+        onClick={() => onOpenChange(false)}
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="relative w-full max-w-md border p-5 shadow-2xl"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--line)",
+          color: "var(--ink)",
+        }}
+      >
+        <div className="flex flex-col gap-2">
+          <h2
+            id={titleId}
+            className="text-base font-semibold"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            {title}
+          </h2>
+          <p id={descriptionId} className="text-sm leading-6" style={{ color: "var(--muted)" }}>
+            Enter a name for the duplicated asset.
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <label
+            htmlFor="duplicate-name"
+            className="block text-xs font-semibold mb-1.5"
+            style={{ color: "var(--ink)" }}
+          >
+            Name
+          </label>
+          <input
+            ref={inputRef}
+            id="duplicate-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full border px-3 py-2 text-sm outline-none focus:ring-2"
+            style={{
+              borderColor: "var(--line)",
+              background: "var(--bg)",
+              color: "var(--ink)",
+              fontFamily: "var(--font-body)",
+            }}
+            disabled={isPending}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) {
+                onConfirm(name.trim());
+              }
+            }}
+          />
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            className="px-4 py-2 text-sm font-semibold border transition-colors disabled:opacity-60"
+            style={{
+              borderColor: "var(--line)",
+              color: "var(--ink)",
+              background: "var(--surface)",
+            }}
+            disabled={isPending}
+            onClick={() => onOpenChange(false)}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--blueprint)",
+              color: "#ffffff",
+            }}
+            disabled={isPending || !name.trim()}
+            onClick={() => onConfirm(name.trim())}
+          >
+            {isPending ? "Duplicating..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
